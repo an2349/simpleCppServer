@@ -19,7 +19,7 @@ string Querry::GetQuerry(const querryType& querryType,const string& maSv,const s
             char buffer[11];
             strftime(buffer, sizeof(buffer), "%Y-%m-%d", now);
             string today(buffer);*/
-            return "SELECT user_name,class_name,full_name,DATE(modified_date) AS modified_date FROM student WHERE user_name = '" + maSv +"'";//AND DATE(modified_date) = '" + today + "';";
+            return "SELECT user_name,class_name,full_name,DATE(modified_date) AS modified_date FROM student WHERE user_name = '" + maSv +"';CALL proc_diem_danh('"+maSv+"';";//AND DATE(modified_date) = '" + today + "';";
         }
         default:
             return "";
