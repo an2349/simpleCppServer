@@ -1,5 +1,5 @@
 #include <iostream>
-#include <future>  // std::async
+#include <future> 
 #include "configs.h"
 #include "Controller/Controller.h"
 #include <arpa/inet.h>
@@ -39,7 +39,7 @@ int main() {
     cout << "Server đang lắng nghe trên port " << PORT << "\n";
     DBPool dbPool;//bee boi
 
-    Controller controller; // đối tượng xử lý nghiệp vụ
+    Controller controller;
     vector<future<void>> futures;
     while (true) {
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
