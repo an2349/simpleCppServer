@@ -10,7 +10,7 @@ future<string> Controller::handleRequestAsync(const string& req) {
     return async(launch::async, [req, this]() {
         Response<string> response;
         try {
-            cout << "Nhận request: " << req << "\n";
+            //cout << "Nhận request: " << req << "\n";
             size_t hEnd = req.find("\r\n\r\n");
             if(hEnd == string::npos) {
                 return response.build(400,"Form không hợp lệ",new string(""));
@@ -44,7 +44,7 @@ future<string> Controller::handleRequestAsync(const string& req) {
                 string boundary = GetBoundary(GetContentType(req));
                 vector<MultiPartModel>* parts = new vector<MultiPartModel>();
                 *parts = MultiPartModel::bindMultiParts(body, boundary);
-                cout<<"boundary la "+ boundary<<"\n"<<parts->size()<<"\n";
+                //cout<<"boundary la "+ boundary<<"\n"<<parts->size()<<"\n";
                 if (parts->empty()) {
                     delete parts;
                     return response.build(400, "Khong hop le1", new string(""));
