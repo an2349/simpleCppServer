@@ -39,7 +39,7 @@ void startServer() {
     }
 
     //scout << "Server đang lắng nghe trên port " << PORT << "\n";
-    DBPool dbPool;//bee boi
+    //DBPool dbPool;//bee boi
 
     Controller controller;
     vector<future<void>> futures;

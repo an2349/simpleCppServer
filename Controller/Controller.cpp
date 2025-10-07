@@ -74,27 +74,6 @@ future<string> Controller::handleRequestAsync(const string& req) {
                 return response.build(200, "Upload thanh cong", new string(""));
             }
 
-            /*
-            if (url == "/upload" && checkedMethod ==methods::PUT) {
-                ContentModel* contentModel = new ContentModel();
-                *contentModel = contentModel->parseJson(body);
-                cout<<body<<"\n";
-                cout<<contentModel->name;
-                if (contentModel->name == ""
-                    || contentModel->value == ""
-                    || contentModel->totalPart <=0
-                    || contentModel->part <=0)
-                    {
-                    delete contentModel;
-                    return response.build(400 ,"Khong hop le",new string(""));
-                    }
-                return response.build(200 ,"Đã nhận PUT, trả về thông báo OK",new string(""));
-            }*/
-
-            //if (url == "/upload-many" && checkedMethod == methods::PUT) {
-            //    return response.build(400 ,"nothing",new string(""));
-            //}
-
             else {
                 return response.build(400 ,"Yêu cầu không hợp lệ",new string(""));
             }
