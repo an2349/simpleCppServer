@@ -17,7 +17,7 @@ future<string> CheckInService::CheckInAsync(const string& maSv,const string& mac
             if (sivi.Masv == "") {
                 return response.build(400,"Sinh vien khong ton tai trong lop",sinhVien);
             }
-            else if (sivi.Mac!= macAdress) {
+            else if (sivi.Mac !="" && sivi.Mac!= macAdress) {
                 return response.build(400,"Khong phai thiet bi dang ky cua sinh vien",sinhVien);
             }
             else if (sivi.IsCheckIn) {
