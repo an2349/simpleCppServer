@@ -67,6 +67,7 @@ future<vector<struct DiemDanh> > CheckInService::GetAllSinhVien(const string& cl
         }
         catch (...) {
             dbPool.closeConn(conn);
+            return vector<struct DiemDanh>();
         }
     });
 }
