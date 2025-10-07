@@ -32,11 +32,15 @@ future<string> Controller::handleRequestAsync(const string& req) {
             }
 
             if (url == "/maso" && checkedMethod == methods::POST) {
-                string maSv = GetMsv(body);
-                if (maSv == "") {
-                    return response.build(400,"Ma so khong hop le",new string(""));
+                RequestModel* requestModel = new RequestModel();
+                *requestModel = requestModel-> parseJson(body);
+                string maSv = requestModel->MaSv.empty() ? "" : requestModel->MaSv;
+                string macAdress = requestModel->Mac.empty() ? "" : requestModel->Mac;
+                delete requestModel;
+                if (maSv == "" || macAdress == "") {
+                    return response.build(400,"khong hop le",new string(""));
                 }
-                return checkInService.CheckInAsync(maSv).get();
+                return checkInService.CheckInAsync(maSv, macAdress).get();
             }
 
             if (url == "/upload" && checkedMethod == methods::PUT)
@@ -73,6 +77,27 @@ future<string> Controller::handleRequestAsync(const string& req) {
                 delete parts;
                 return response.build(200, "Upload thanh cong", new string(""));
             }
+
+            /*
+            if (url == "/upload" && checkedMethod ==methods::PUT) {
+                ContentModel* contentModel = new ContentModel();
+                *contentModel = contentModel->parseJson(body);
+                cout<<body<<"\n";
+                cout<<contentModel->name;
+                if (contentModel->name == ""
+                    || contentModel->value == ""
+                    || contentModel->totalPart <=0
+                    || contentModel->part <=0)
+                    {
+                    delete contentModel;
+                    return response.build(400 ,"Khong hop le",new string(""));
+                    }
+                return response.build(200 ,"Đã nhận PUT, trả về thông báo OK",new string(""));
+            }*/
+
+            //if (url == "/upload-many" && checkedMethod == methods::PUT) {
+            //    return response.build(400 ,"nothing",new string(""));
+            //}
 
             else {
                 return response.build(400 ,"Yêu cầu không hợp lệ",new string(""));

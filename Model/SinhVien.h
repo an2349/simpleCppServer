@@ -15,12 +15,13 @@ public:
     string  MaSv        = "";
     string  ClassName   = "";
     string  Date        = "";
-    string  FullName   = "";
+    string  FullName    = "";
+    string  Mac         = "";
 };
 inline void to_json(json& j, const SinhVien& sv) {
-    j = json{{"maSv",        sv.MaSv},
-             {"className",   sv.ClassName},
-             {"ten",           sv.FullName} };
+    j = json{{"Ma so",      sv.MaSv},
+             {"Lop",        sv.ClassName},
+             {"Ten",        sv.FullName} };
 }
 
 

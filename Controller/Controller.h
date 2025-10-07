@@ -9,6 +9,7 @@
 #include <future>
 #include "../Model/Response.cpp"
 #include  "../Model/MultiPartModel.h"
+#include "../Model/RequestModel.h"
 #include "../Services/CheckInService.h"
 #include "../Services/FileUpLoadServices.h"
 using namespace std;

@@ -19,11 +19,11 @@ private:
     SinhVienRepo repo;
     Querry querry;
     future<SinhVien> CheckSinhVien(shared_ptr<DBConnection>& conn,const string& maSv);
-    future<bool> CheckInSinhVien(shared_ptr<DBConnection>& conn,const string& maSv,string& className);
+    future<bool> CheckInSinhVien(shared_ptr<DBConnection>& conn,const string& maSv,string& macAdress);
 public:
     CheckInService(): dbPool(g_DBPool) {}
     //CheckInService(DBPool& pool):dbPool(pool) {}
-    future<string> CheckInAsync(const string& maSv);
+    future<string> CheckInAsync(const string& maSv, const string& macAdress);
 };
 
 

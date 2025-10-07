@@ -30,6 +30,7 @@ SinhVien SinhVienRepo::KiemTra(const shared_ptr<DBConnection>& conn, const strin
             sinhVien.ClassName =       res->getString("class_name");
             sinhVien.Date      =       res->getString("modified_date");
             sinhVien.FullName  =       res->getString("full_name");
+            sinhVien.Mac          =       res->getString("mac");
             return sinhVien;
         }
         else {
