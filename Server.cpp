@@ -132,6 +132,7 @@ int main() {
         }
 
         else if (command == "thoat") {
+            stopServer();
             cout<<"Bye\n";
             return 0;
         }
