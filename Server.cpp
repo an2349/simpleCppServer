@@ -75,14 +75,14 @@ void stopServer() {
 
 void restartServer(const string& className) {
     stopServer();
-    while (serverStatus != -1) sleep(1);
+    while (serverStatus != -1){ sleep(0.5);}
     ServerThread = async(launch::async, startServer,className);
 }
 
 int main() {
     while(true){
         string input;
-        cout<<"server :";
+        cout<<"\rServer :";
         getline(cin, input);
 
         istringstream iss(input);
@@ -125,10 +125,10 @@ int main() {
                 classNames = "";
             }
 
-            cout<<"Dang khoi dong lai server";
-            sleep(0.2); cout<<"."; sleep(0.4); cout<<"."; sleep(0.1); cout<<"."; sleep(0.3);
+            cout<<"Dang khoi dong lai server"<<flush;
+            sleep(1.7);cout<<"."<<flush; sleep(1); cout<<"."<<flush; sleep(1); cout<<"."<<flush; sleep(2);
             restartServer(classNames);
-            cout<<"\nKhoi dong lai thanh cong!";
+            cout<<"\rKhoi dong lai thanh cong!\n";
         }
 
         else if (command == "thoat") {

@@ -167,8 +167,7 @@ string Controller::GetMsv(const string& body) {
 
 bool Controller::Validate(const string& maSv) {
     if (maSv.empty()) return false;
-
-    regex pattern("^[a-zA-Z0-9_-]+$");
+    regex pattern("^[a-zA-Z0-9_.-]+$");
     if (!regex_match(maSv, pattern)) return false;
 
     const string forbidden = ";'\"--/**/";
