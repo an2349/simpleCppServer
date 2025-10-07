@@ -23,7 +23,7 @@ future<string> CheckInService::CheckInAsync(const string& maSv,const string& mac
             else if (sivi.IsCheckIn) {
                 return response.build(400,"Sinh vien da diem danh roi",sinhVien);
             }
-            sinhVien ->Mac = sivi.Mac;
+            sinhVien ->Mac = macAdress;
             sinhVien ->MaSv = sivi.MaSv;
             sinhVien ->FullName = sivi.FullName;
             auto i = CheckInSinhVien(conn,maSv,sinhVien->Mac);
