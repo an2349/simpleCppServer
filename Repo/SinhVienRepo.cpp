@@ -8,7 +8,10 @@ bool SinhVienRepo::DiemDanh(const shared_ptr<DBConnection>& conn, const string& 
         unique_ptr<sql::PreparedStatement> sql(
             conn->get()->prepareStatement(query)
         );
-        sql->execute();
+        sql->executeUpdate();
+        while (sql->getMoreResults()) {
+            unique_ptr<sql::ResultSet> trash(sql->getResultSet());
+        }
         return true;
     } catch (sql::SQLException& e) {
         cerr << "MySQL Error: " << e.what() << "\n";
@@ -28,7 +31,6 @@ SinhVien SinhVienRepo::KiemTra(const shared_ptr<DBConnection>& conn, const strin
         if (res->next()) {
             sinhVien.MaSv      =       res->getString("user_name");
             sinhVien.ClassName =       res->getString("class_name");
-            sinhVien.Date      =       res->getString("modified_date");
             sinhVien.FullName  =       res->getString("full_name");
             sinhVien.Mac          =       res->getString("mac");
             return sinhVien;
@@ -53,7 +55,7 @@ vector<struct DiemDanh> SinhVienRepo::GetAllSinhVien(const shared_ptr<DBConnecti
     if (!conn || !conn->get()) return dsSinhVien;
     try {
         unique_ptr<sql::PreparedStatement> sql(
-            conn->get()->prepareStatement("CALL proc_get_cache(?)"));
+            conn->get()->prepareStatement("CALL proc_get_cache(?);"));
 
         sql->setString(1, className);
         unique_ptr<sql::ResultSet> res(sql->executeQuery());
@@ -64,7 +66,11 @@ vector<struct DiemDanh> SinhVienRepo::GetAllSinhVien(const shared_ptr<DBConnecti
             diemDanh.Mac = res->getString("mac");
             diemDanh.MaSv = res->getString("user_name");
             diemDanh.FullName = res->getString("full_name");
+            diemDanh.ClassName = res -> getString("class_name");
             dsSinhVien.push_back(diemDanh);
+        }
+        while (sql->getMoreResults()) {
+            unique_ptr<sql::ResultSet> trash(sql->getResultSet());
         }
         return dsSinhVien;
     }

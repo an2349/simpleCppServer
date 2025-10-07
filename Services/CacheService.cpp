@@ -7,7 +7,7 @@ void CacheService::loadCache(const string& className) {
     auto allSV = checkInService.GetAllSinhVien(className).get();
     unique_lock lock(cache.cacheMutex);
     for (const auto& sv : allSV) {
-        cache.danhSachSV[sv.MaSv] = DiemDanh{false, sv.MaSv, sv.Mac};
+        cache.danhSachSV[sv.MaSv] = DiemDanh{false, sv.MaSv, sv.Mac,sv.FullName,sv.ClassName};
     }
 }
 future<DiemDanh> CacheService::checkSinhVien(const string& maSv,const string& macAdress) {

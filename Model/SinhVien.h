@@ -14,7 +14,6 @@ public:
     SinhVien(string *Lop, string *maSv);
     string  MaSv        = "";
     string  ClassName   = "";
-    string  Date        = "";
     string  FullName    = "";
     string  Mac         = "";
 };

@@ -14,6 +14,7 @@ struct DiemDanh {
     string MaSv = "";
     string Mac = "";
     string FullName = "";
+    string ClassName = "";
 };
 class Cache {
 public:
