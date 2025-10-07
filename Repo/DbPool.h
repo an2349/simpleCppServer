@@ -41,7 +41,7 @@ public:
     DBPool() {
         for (int i = 0; i < MAX_CONN; ++i) {
             auto conn = make_shared<DBConnection>();
-            if (conn->connect()) {  // không truyền param
+            if (conn->connect()) {
                 pool.push_back(conn);
             } else {
                 cerr << "Khởi tạo DB connection thất bại\n";
@@ -53,7 +53,7 @@ public:
         unique_lock<mutex> lock(mtx);
         //cv.wait(lock, [this]() { return !pool.empty(); });
         if (!cv.wait_for(lock, chrono::seconds(TIME_OUT), [this]() { return !pool.empty(); })) {
-            return nullptr;  // hoặc throw runtime_error("Timeout khi lấy connection");
+            return nullptr;
         }
         auto conn = pool.back();
         pool.pop_back();

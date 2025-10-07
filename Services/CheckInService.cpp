@@ -22,7 +22,6 @@ future<string> CheckInService::CheckInAsync(const string& maSv) {
                 char buffer[11];
                 strftime(buffer, sizeof(buffer), "%Y-%m-%d", now);
                 string today(buffer);
-                std::cout << today << endl;
                 if(today == sv.Date) {
                     return response.build(400,"Sinh vien da diem danh roi",sinhVien);
                 }
