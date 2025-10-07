@@ -61,7 +61,7 @@ vector<struct DiemDanh> SinhVienRepo::GetAllSinhVien(const shared_ptr<DBConnecti
         unique_ptr<sql::ResultSet> res(sql->executeQuery());
 
         while (res->next()) {
-            struct DiemDanh* diemDanh;
+            struct DiemDanh* diemDanh = new struct DiemDanh();
             int check = res->getInt("dd");
             if (check == 1) {
                 diemDanh->IsCheckIn = true;
