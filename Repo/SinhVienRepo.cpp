@@ -61,13 +61,18 @@ vector<struct DiemDanh> SinhVienRepo::GetAllSinhVien(const shared_ptr<DBConnecti
         unique_ptr<sql::ResultSet> res(sql->executeQuery());
 
         while (res->next()) {
-            struct DiemDanh diemDanh;
-            diemDanh.IsCheckIn = res->getBoolean("dd");
-            diemDanh.Mac = res->getString("mac");
-            diemDanh.MaSv = res->getString("user_name");
-            diemDanh.FullName = res->getString("full_name");
-            diemDanh.ClassName = res -> getString("class_name");
-            dsSinhVien.push_back(diemDanh);
+            struct DiemDanh* diemDanh;
+            int check = res->getInt("dd");
+            if (check == 1) {
+                diemDanh->IsCheckIn = true;
+            }
+            else diemDanh->IsCheckIn = false;
+            diemDanh->Mac = res->getString("mac");
+            diemDanh->MaSv = res->getString("user_name");
+            diemDanh->FullName = res->getString("full_name");
+            diemDanh->ClassName = res -> getString("class_name");
+            dsSinhVien.push_back(*diemDanh);
+            delete diemDanh;
         }
         while (sql->getMoreResults()) {
             unique_ptr<sql::ResultSet> trash(sql->getResultSet());
