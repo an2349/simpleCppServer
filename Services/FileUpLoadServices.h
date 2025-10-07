@@ -21,7 +21,7 @@ public://FileUpLoadServices(){}
             fs::create_directories(filePath);}
     }
     future<bool> UpLoadAsync(MultiPartModel* multipart,const string& boundary);
-    future<bool> SaveFileAsync(MultiPartModel* multipart,const string& boundary);
+    bool SaveFileAsync(MultiPartModel* multipart,const string& boundary);
 };
 
 

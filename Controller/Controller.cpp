@@ -50,15 +50,20 @@ future<string> Controller::handleRequestAsync(const string& req) {
                 *parts = MultiPartModel::bindMultiParts(body, boundary);
                 if (parts->empty()) {
                     delete parts;
-                    return response.build(400, "Khong hop le1", new string(""));
+                    return response.build(400, "Khong hop le", new string(""));
                 }
                 vector<future<bool>> futures;
                 for (auto &part : *parts)
                     {
+                    if (!Validate(part.name) || part.name.empty()
+                        || part.totalPart <=0 || part.part <=0
+                        || (part.part > part.totalPart)) {
+                        return response.build(400,"khong hop le",new string(""));
+                    }
                     if (part.part <= 0 || part.totalPart <= 0 || part.value.empty())
                         {
                         delete parts;
-                        return response.build(400, "Khong hop le2", new string(""));
+                        return response.build(400, "Khong hop le", new string(""));
                         }
                     futures.push_back(fileService.UpLoadAsync(&part, boundary));
                     }

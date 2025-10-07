@@ -16,6 +16,7 @@ public:
     string   name         ="";
     int      part         = 1;
     string   contentType   = "";
+    size_t   totalSize     = 0;
     vector<uint8_t>  value   ;
     MultiPartModel bindMultiPart(const string& body, const string& boundary);
     static vector<MultiPartModel> bindMultiParts(const string& body, const string& boundary) {
@@ -29,7 +30,6 @@ public:
 
             partStart += delimiter.size();
 
-            // bỏ qua CRLF
             if (body.substr(partStart, 2) == "\r\n") partStart += 2;
 
             size_t partEnd = body.find(delimiter, partStart);
@@ -37,9 +37,8 @@ public:
 
             string partData = body.substr(partStart, partEnd - partStart);
 
-            // Nếu rỗng thì bỏ qua
             if (partData.find("--") == 0) {
-                break; // hết chunk
+                break;
             }
             if (partData.empty()) break;
 

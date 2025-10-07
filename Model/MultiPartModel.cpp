@@ -16,7 +16,7 @@ MultiPartModel MultiPartModel::bindMultiPart(const string& httpBody, const strin
 
     string headers = partData.substr(0, headerEnd);
     string bodyRaw = partData.substr(headerEnd + 4);
-    bodyRaw = trim(bodyRaw);  // loại bỏ \r\n dư
+    bodyRaw = trim(bodyRaw);
 
     istringstream headerStream(headers);
     string line;
@@ -43,6 +43,12 @@ MultiPartModel MultiPartModel::bindMultiPart(const string& httpBody, const strin
                 totalPos += 7;
                 size_t totalEnd = line.find("\"", totalPos);
                 model.totalPart = stoi(trim(line.substr(totalPos, totalEnd - totalPos)));
+            }
+            size_t sizePos = line.find("size=\"");
+            if (sizePos != string::npos) {
+                sizePos += 6;
+                size_t sizeEnd = line.find("\"", sizePos);
+                model.totalSize = stoi(trim(line.substr(sizePos, sizeEnd - sizePos)));
             }
         }
         else if (line.find("Content-Type:") != string::npos) {
