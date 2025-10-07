@@ -1,6 +1,6 @@
 #include "SinhVienRepo.h"
-
 #include "DbPool.h"
+//#include "../Model/Cache.h"
 
 bool SinhVienRepo::DiemDanh(const shared_ptr<DBConnection>& conn, const string& query) {
     if (!conn || !conn->get()) return false;
@@ -46,5 +46,33 @@ SinhVien SinhVienRepo::KiemTra(const shared_ptr<DBConnection>& conn, const strin
     catch (...) {
         cerr << "MySQL Error: Unknown\n";
         return sinhVien;
+    }
+}
+vector<struct DiemDanh> SinhVienRepo::GetAllSinhVien(const shared_ptr<DBConnection>& conn,const string& className) {
+    vector<struct DiemDanh> dsSinhVien;
+    if (!conn || !conn->get()) return dsSinhVien;
+    try {
+        unique_ptr<sql::PreparedStatement> sql(
+            conn->get()->prepareStatement("CALL proc_get_cache(?)"));
+
+        sql->setString(1, className);
+        unique_ptr<sql::ResultSet> res(sql->executeQuery());
+
+        while (res->next()) {
+            struct DiemDanh diemDanh;
+            diemDanh.IsCheckIn = res->getBoolean("dd");
+            diemDanh.Mac = res->getString("mac");
+            diemDanh.Masv = res->getString("masv");
+            dsSinhVien.push_back(diemDanh);
+        }
+        return dsSinhVien;
+    }
+    catch (sql::SQLException& e) {
+        cerr << "MySQL Error: " << e.what() << "\n";
+        return dsSinhVien;
+    }
+    catch (...) {
+        cerr << "MySQL Error: Unknown\n";
+        return dsSinhVien;
     }
 }

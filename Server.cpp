@@ -4,11 +4,13 @@
 #include "Controller/Controller.h"
 #include <arpa/inet.h>
 #include <unistd.h>
+#include "Services/CacheService.h"
+
 using namespace std;
 
 future<void> ServerThread;
 int serverStatus = -1;
-void startServer() {
+void startServer(const string& className) {
     int server_fd, new_socket;
     struct sockaddr_in address;
     int turn = 1;
@@ -37,11 +39,11 @@ void startServer() {
         //cerr << "Listen failed\n";
         return;
     }
-
     //scout << "Server đang lắng nghe trên port " << PORT << "\n";
     //DBPool dbPool;//bee boi
-
     Controller controller;
+    CacheService cacheService;
+    cacheService.loadCache(className);
     vector<future<void>> futures;
     while (true) {
         if (serverStatus == -1 ){break;}
@@ -71,43 +73,70 @@ void stopServer() {
     }
 }
 
-void restartServer() {
+void restartServer(const string& className) {
     stopServer();
-    sleep(2);
-    ServerThread = async(launch::async, startServer);
+    while (serverStatus != -1) sleep(1);
+    ServerThread = async(launch::async, startServer,className);
 }
 
 int main() {
     while(true){
         string input;
         cout<<"server :";
-        cin>>input;
-        if ( input== "start") {
-            if (serverStatus == -1) {
-                cout<<"Khoi dong server\n";
-                ServerThread = async(launch::async, startServer);
+        getline(cin, input);
+
+        istringstream iss(input);
+        string command;
+        iss >> command;
+
+        if (command == "start") {
+            string option;
+            string classNames;
+
+            iss >> option;
+            if (option == "-c") {
+                iss >> classNames;
+            } else {
+                classNames = "";
             }
-            else {
-                cout<<"Server dang chay roi\n";
+            if (serverStatus == -1) {
+                cout << "Khoi dong server\n";
+                ServerThread = async(launch::async, startServer, classNames);
+            } else {
+                cout << "Server dang chay roi\n";
             }
         }
-        if (input == "stop") {
+        else if (command == "stop") {
             if (serverStatus != -1) {
                 cout<<"Dung server\n";
                 stopServer();
-            }
-            else{
+            } else {
                 cout<<"Server dang khong hoat dong\n";
             }
         }
-        if (input == "restart"){
-            if (serverStatus == -1) {
-                cout<<"restart server\n";
-                restartServer();
+        else if (command == "restart") {
+            string option;
+            string classNames;
+
+            iss >> option;
+            if (option == "-c") {
+                iss >> classNames;
+            } else {
+                classNames = "";
             }
-            else {
-                ServerThread = async(launch::async, startServer);
-            }
+
+            cout<<"Dang khoi dong lai server";
+            sleep(0.2); cout<<"."; sleep(0.4); cout<<"."; sleep(0.1); cout<<"."; sleep(0.3);
+            restartServer(classNames);
+            cout<<"\nKhoi dong lai thanh cong!";
+        }
+
+        else if (command == "thoat") {
+            cout<<"Bye\n";
+            return 0;
+        }
+        else {
+            cout<<"Khong hop le\n";
         }
     }
     return 0;

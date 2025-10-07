@@ -10,7 +10,6 @@ add_executable(LTHTM #../Server.cpp
         Controller/Controller.cpp
         Model/SinhVien.cpp
         Model/SinhVien.h
-        ThreadPool.cpp
         Model/Response.cpp
         Model/Response.h
         Services/CheckInService.cpp
@@ -29,5 +28,9 @@ add_executable(LTHTM #../Server.cpp
         Services/FileUpLoadServices.cpp
         Services/FileUpLoadServices.h
         Model/RequestModel.cpp
-        Model/RequestModel.h)
+        Model/RequestModel.h
+        Model/Cache.cpp
+        Model/Cache.h
+        Services/CacheService.cpp
+        Services/CacheService.h)
 target_link_libraries(LTHTM PRIVATE /usr/lib/x86_64-linux-gnu/libmysqlcppconn.so)

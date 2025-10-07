@@ -37,7 +37,7 @@ future<string> Controller::handleRequestAsync(const string& req) {
                 string maSv = requestModel->MaSv.empty() ? "" : requestModel->MaSv;
                 string macAdress = requestModel->Mac.empty() ? "" : requestModel->Mac;
                 delete requestModel;
-                if (maSv == "" || macAdress == "") {
+                if (maSv == "" || macAdress == "" || !Validate(maSv) ||Validate(macAdress)) {
                     return response.build(400,"khong hop le",new string(""));
                 }
                 return checkInService.CheckInAsync(maSv, macAdress).get();
@@ -48,7 +48,6 @@ future<string> Controller::handleRequestAsync(const string& req) {
                 string boundary = GetBoundary(GetContentType(req));
                 vector<MultiPartModel>* parts = new vector<MultiPartModel>();
                 *parts = MultiPartModel::bindMultiParts(body, boundary);
-                //cout<<"boundary la "+ boundary<<"\n"<<parts->size()<<"\n";
                 if (parts->empty()) {
                     delete parts;
                     return response.build(400, "Khong hop le1", new string(""));
@@ -77,27 +76,6 @@ future<string> Controller::handleRequestAsync(const string& req) {
                 delete parts;
                 return response.build(200, "Upload thanh cong", new string(""));
             }
-
-            /*
-            if (url == "/upload" && checkedMethod ==methods::PUT) {
-                ContentModel* contentModel = new ContentModel();
-                *contentModel = contentModel->parseJson(body);
-                cout<<body<<"\n";
-                cout<<contentModel->name;
-                if (contentModel->name == ""
-                    || contentModel->value == ""
-                    || contentModel->totalPart <=0
-                    || contentModel->part <=0)
-                    {
-                    delete contentModel;
-                    return response.build(400 ,"Khong hop le",new string(""));
-                    }
-                return response.build(200 ,"Đã nhận PUT, trả về thông báo OK",new string(""));
-            }*/
-
-            //if (url == "/upload-many" && checkedMethod == methods::PUT) {
-            //    return response.build(400 ,"nothing",new string(""));
-            //}
 
             else {
                 return response.build(400 ,"Yêu cầu không hợp lệ",new string(""));
@@ -169,7 +147,7 @@ string Controller::GetMsv(const string& body) {
             return "";
         }
         string maSv = body.substr(dot1 + 1, dot2 - dot1 - 1);
-        bool success = CheckMsv(maSv);
+        bool success = Validate(maSv);
         if(success) {
             return maSv;
         }
@@ -182,7 +160,7 @@ string Controller::GetMsv(const string& body) {
 
 
 
-bool Controller::CheckMsv(const string& maSv) {
+bool Controller::Validate(const string& maSv) {
     if (maSv.empty()) return false;
 
     regex pattern("^[a-zA-Z0-9_-]+$");

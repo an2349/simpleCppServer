@@ -22,7 +22,6 @@ future<bool> FileUpLoadServices::SaveFileAsync(MultiPartModel* multipart, const 
                     fs::create_directories(boundaryFolder);
                 }
 
-                // File chunk path: part số thứ tự
                 string chunkFile = boundaryFolder + "/" + to_string(multipart->part) + ".chunk";
                 ofstream ofs(chunkFile, ios::binary);
                 if (!ofs.is_open()) {std::cout<<"loi1";return false;}
@@ -30,7 +29,6 @@ future<bool> FileUpLoadServices::SaveFileAsync(MultiPartModel* multipart, const 
                 ofs.write((char*)multipart->value.data(), multipart->value.size());
                 ofs.close();
 
-                // Kiểm tra đã đủ chunk để ghép file
                 bool allChunksPresent = true;
                 for (int i = 1; i <= multipart->totalPart; i++) {
                     string path = boundaryFolder + "/" + to_string(i) + ".chunk";

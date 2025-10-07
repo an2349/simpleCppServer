@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include "../Model/SinhVien.h"
+#include "../Model/Cache.h"
 
 class DBConnection;
 using  namespace  std;
@@ -16,6 +17,7 @@ public:
     SinhVienRepo(){}
     bool DiemDanh(const shared_ptr<DBConnection>& conn,const string& querry);
     SinhVien KiemTra(const shared_ptr<DBConnection>& conn,const string& querry);
+    vector<struct DiemDanh> GetAllSinhVien(const shared_ptr<DBConnection>& conn,const string& className);
 };
 
 

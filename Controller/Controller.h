@@ -30,7 +30,7 @@ private:
     string GetBody(const string& req);
 
     string GetMsv(const string& body);
-    bool CheckMsv(const string& maSv);
+    bool Validate(const string& maSv);
 
     string GetContentType(const string& req);
     bool CheckConTent(const string& contentType);
