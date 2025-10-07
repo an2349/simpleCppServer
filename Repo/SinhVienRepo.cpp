@@ -62,7 +62,8 @@ vector<struct DiemDanh> SinhVienRepo::GetAllSinhVien(const shared_ptr<DBConnecti
             struct DiemDanh diemDanh;
             diemDanh.IsCheckIn = res->getBoolean("dd");
             diemDanh.Mac = res->getString("mac");
-            diemDanh.Masv = res->getString("user_name");
+            diemDanh.MaSv = res->getString("user_name");
+            diemDanh.FullName = res->getString("full_name");
             dsSinhVien.push_back(diemDanh);
         }
         return dsSinhVien;

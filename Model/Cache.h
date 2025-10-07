@@ -11,8 +11,9 @@
 using namespace std;
 struct DiemDanh {
     bool IsCheckIn = false;
-    string Masv = "";
+    string MaSv = "";
     string Mac = "";
+    string FullName = "";
 };
 class Cache {
 public:

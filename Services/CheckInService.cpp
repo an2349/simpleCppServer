@@ -14,7 +14,7 @@ future<string> CheckInService::CheckInAsync(const string& maSv,const string& mac
         try {
             CacheService cacheService;
             auto sivi = cacheService.checkSinhVien(maSv, macAdress).get();
-            if (sivi.Masv == "") {
+            if (sivi.MaSv == "") {
                 return response.build(400,"Sinh vien khong ton tai trong lop",sinhVien);
             }
             else if (sivi.Mac !="" && sivi.Mac!= macAdress) {
@@ -23,6 +23,9 @@ future<string> CheckInService::CheckInAsync(const string& maSv,const string& mac
             else if (sivi.IsCheckIn) {
                 return response.build(400,"Sinh vien da diem danh roi",sinhVien);
             }
+            sinhVien ->Mac = sivi.Mac;
+            sinhVien ->MaSv = sivi.MaSv;
+            sinhVien ->FullName = sivi.FullName;
             auto i = CheckInSinhVien(conn,maSv,sinhVien->Mac);
             bool success = i.get();
             if (!success) {
