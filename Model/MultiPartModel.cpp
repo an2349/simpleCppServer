@@ -11,21 +11,17 @@ MultiPartModel MultiPartModel::bindMultiPart(vector<char>* request, const string
 
     if (!request || request->empty()) return model;
 
-    // Tìm vị trí header kết thúc "\r\n\r\n" trong vector
     auto it = std::search(request->begin(), request->end(),
                           "\r\n\r\n", "\r\n\r\n" + 4); // iterator đến cuối header
     if (it == request->end()) return model;
 
-    // Tạo string tạm cho header để parse
     string headers(request->begin(), it);
     headers = trim(headers);
 
-    // Body là phần còn lại của vector
     auto bodyStartIt = it + 4;
     string bodyRaw(bodyStartIt, request->end());
     bodyRaw = trim(bodyRaw);
 
-    // Parse header line by line
     istringstream headerStream(headers);
     string line;
     while (getline(headerStream, line)) {
@@ -68,7 +64,6 @@ MultiPartModel MultiPartModel::bindMultiPart(vector<char>* request, const string
         }
     }
 
-    // Chuyển body trực tiếp thành vector<uint8_t>
     model.value = vector<uint8_t>(bodyRaw.begin(), bodyRaw.end());
 
     return model;
