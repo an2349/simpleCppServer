@@ -6,8 +6,9 @@
 #include <regex>
 using namespace std;
 
-future<string> Controller::handleRequestAsync(const string& req) {
-    return async(launch::async, [req, this]() {
+future<string> Controller::handleRequestAsync(vector<char>* request) {
+    return async(launch::async, [request, this]() {
+        string req(request->begin(), request->end());
         Response<string> response;
         try {
             //cout << "Nhận request: " << req << "\n";
@@ -47,7 +48,7 @@ future<string> Controller::handleRequestAsync(const string& req) {
                 {
                 string boundary = GetBoundary(GetContentType(req));
                 vector<MultiPartModel>* parts = new vector<MultiPartModel>();
-                *parts = MultiPartModel::bindMultiParts(body, boundary);
+                *parts = MultiPartModel::bindMultiParts(request, boundary);
                 if (parts->empty()) {
                     delete parts;
                     return response.build(400, "Khong hop le", new string(""));

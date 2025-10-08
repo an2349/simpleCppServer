@@ -4,20 +4,28 @@
 
 #include "MultiPartModel.h"
 
+#include <algorithm>
 #include <sstream>
-MultiPartModel MultiPartModel::bindMultiPart(const string& httpBody, const string& boundary) {
+MultiPartModel MultiPartModel::bindMultiPart(vector<char>* request, const string& boundary) {
     MultiPartModel model;
 
-    string partData = trim(httpBody);
-    if (partData.empty()) return model;
+    if (!request || request->empty()) return model;
 
-    size_t headerEnd = partData.find("\r\n\r\n");
-    if (headerEnd == string::npos) return model;
+    // Tìm vị trí header kết thúc "\r\n\r\n" trong vector
+    auto it = std::search(request->begin(), request->end(),
+                          "\r\n\r\n", "\r\n\r\n" + 4); // iterator đến cuối header
+    if (it == request->end()) return model;
 
-    string headers = partData.substr(0, headerEnd);
-    string bodyRaw = partData.substr(headerEnd + 4);
+    // Tạo string tạm cho header để parse
+    string headers(request->begin(), it);
+    headers = trim(headers);
+
+    // Body là phần còn lại của vector
+    auto bodyStartIt = it + 4;
+    string bodyRaw(bodyStartIt, request->end());
     bodyRaw = trim(bodyRaw);
 
+    // Parse header line by line
     istringstream headerStream(headers);
     string line;
     while (getline(headerStream, line)) {
@@ -44,6 +52,7 @@ MultiPartModel MultiPartModel::bindMultiPart(const string& httpBody, const strin
                 size_t totalEnd = line.find("\"", totalPos);
                 model.totalPart = stoi(trim(line.substr(totalPos, totalEnd - totalPos)));
             }
+
             size_t sizePos = line.find("size=\"");
             if (sizePos != string::npos) {
                 sizePos += 6;
@@ -59,6 +68,8 @@ MultiPartModel MultiPartModel::bindMultiPart(const string& httpBody, const strin
         }
     }
 
+    // Chuyển body trực tiếp thành vector<uint8_t>
     model.value = vector<uint8_t>(bodyRaw.begin(), bodyRaw.end());
+
     return model;
 }

@@ -18,31 +18,47 @@ public:
     string   contentType   = "";
     size_t   totalSize     = 0;
     vector<uint8_t>  value   ;
-    MultiPartModel bindMultiPart(const string& body, const string& boundary);
-    static vector<MultiPartModel> bindMultiParts(const string& body, const string& boundary) {
+    static MultiPartModel bindMultiPart(vector<char>* body, const string& boundary);
+    static vector<MultiPartModel> bindMultiParts(vector<char>* request, const string& boundary) {
         vector<MultiPartModel> parts;
         string delimiter = "--" + boundary;
         size_t start = 0;
 
+        auto findDelimiter = [&](size_t pos) -> size_t {
+            for (size_t i = pos; i + delimiter.size() <= request->size(); ++i) {
+                bool match = true;
+                for (size_t j = 0; j < delimiter.size(); ++j) {
+                    if ((*request)[i + j] != delimiter[j]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return i;
+            }
+            return string::npos;
+        };
+
         while (true) {
-            size_t partStart = body.find(delimiter, start);
+            size_t partStart = findDelimiter(start);
             if (partStart == string::npos) break;
 
             partStart += delimiter.size();
+            if (partStart + 2 <= request->size() &&
+                (*request)[partStart] == '\r' &&
+                (*request)[partStart + 1] == '\n') {
+                partStart += 2;
+                }
 
-            if (body.substr(partStart, 2) == "\r\n") partStart += 2;
+            size_t partEnd = findDelimiter(partStart);
+            if (partEnd == string::npos) partEnd = request->size();
 
-            size_t partEnd = body.find(delimiter, partStart);
-            if (partEnd == string::npos) partEnd = body.size();
+            if (partEnd <= partStart) break;
 
-            string partData = body.substr(partStart, partEnd - partStart);
+            vector<char>* partData= new vector<char>(request->begin() + partStart, request->begin() + partEnd);
 
-            if (partData.find("--") == 0) {
-                break;
-            }
-            if (partData.empty()) break;
+            if (partData->size() >= 2 && (*partData)[0] == '-' && (*partData)[1] == '-') break;
 
-            MultiPartModel part = MultiPartModel().bindMultiPart(partData, boundary);
+            MultiPartModel part = bindMultiPart(partData, boundary);
             parts.push_back(part);
 
             start = partEnd;
@@ -50,7 +66,6 @@ public:
 
         return parts;
     }
-
 };
 inline string trim(const string& s) {
     size_t start = s.find_first_not_of("\r\n ");

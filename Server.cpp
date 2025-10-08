@@ -4,6 +4,8 @@
 #include "Controller/Controller.h"
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/socket.h>
 #include "Services/CacheService.h"
 
 using namespace std;
@@ -52,16 +54,67 @@ void startServer(const string& className) {
             continue;
         }
 
-        futures.push_back(async(launch::async, [new_socket, &controller]() {
-            char buffer[1024] = {0};
-            read(new_socket, buffer, 1024);
-            string request(buffer);
-            auto response_future = controller.handleRequestAsync(request);
-            string response = response_future.get();
+       futures.push_back(async(launch::async, [new_socket, &controller]() {
+    vector<char>* data = new vector<char>();
+    char buffer[2048];
+    ssize_t n;
 
-            send(new_socket, response.c_str(), response.size(), 0);
-            close(new_socket);
-        }));
+    // set socket non-blocking
+    int flags = fcntl(new_socket, F_GETFL, 0);
+    fcntl(new_socket, F_SETFL, flags | O_NONBLOCK);
+
+    size_t totalRead = 0;
+    size_t contentLength = 0;
+    bool headerParsed = false;
+
+    while (true) {
+        n = read(new_socket, buffer, sizeof(buffer));
+        if (n > 0) {
+            data->insert(data->end(), buffer, buffer + n);
+            totalRead += n;
+
+            // parse header để tìm Content-Length
+            if (!headerParsed) {
+                string requestStr(data->begin(), data->end());
+                size_t pos = requestStr.find("\r\n\r\n");
+                if (pos != string::npos) {zzz
+                    headerParsed = true;
+                    size_t clPos = requestStr.find("Content-Length:");
+                    if (clPos != string::npos) {
+                        clPos += 15; // skip "Content-Length:"
+                        size_t endLine = requestStr.find("\r\n", clPos);
+                        string clStr = requestStr.substr(clPos, endLine - clPos);
+                        contentLength = stoi(clStr);
+                    }
+                }
+            }
+
+            // nếu đã đọc đủ body thì break
+            if (headerParsed && totalRead >= contentLength) break;
+        } else if (n == 0) {
+            // client đóng socket
+            break;
+        } else {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // chưa có dữ liệu mới, sleep 10ms
+                this_thread::sleep_for(chrono::milliseconds(10));
+                continue;
+            } else {
+                // lỗi khác
+                perror("read");
+                break;
+            }
+        }
+    }
+
+    auto response_future = controller.handleRequestAsync(data);
+    string response = response_future.get();
+    delete data;
+
+    send(new_socket, response.c_str(), response.size(), 0);
+    close(new_socket);
+}));
+
     }
 }
 

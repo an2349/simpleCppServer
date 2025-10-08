@@ -17,7 +17,7 @@ using namespace std;
 class Controller {
 public:
     Controller() {}
-    future<string> handleRequestAsync(const string& req);
+    future<string> handleRequestAsync(vector<char>* req);
 private:
     CheckInService checkInService;
     FileUpLoadServices fileService;
