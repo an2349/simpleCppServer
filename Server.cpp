@@ -57,6 +57,7 @@ void startServer(const string &className) {
     if (listen(server_fd, 3) < 0) {
         return;
     }
+
     dbPool = new DBPool();
     fileUpLoadService = new FileUpLoadServices();
     checkInService = new CheckInService(*dbPool);
@@ -68,17 +69,14 @@ void startServer(const string &className) {
     vector<future<void> > futures;
 
     while (true) {
-        if (serverStatus == -1) { break; }
+        if (serverStatus == -1) break;
         if ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen)) < 0) {
             continue;
         }
 
         futures.push_back(async(launch::async, [new_socket]() {
             vector<char> *data = new vector<char>();
-            char buffer[MAX_CONTENT_LENGTH];
-            ssize_t n;
             bool isError = false;
-
             int flags = fcntl(new_socket, F_GETFL, 0);
             fcntl(new_socket, F_SETFL, flags | O_NONBLOCK);
 
@@ -87,11 +85,12 @@ void startServer(const string &className) {
             bool headerParsed = false;
             size_t totalBodyRead = 0;
             const size_t READ_CHUNK = 1024;
+            char buffer[READ_CHUNK];
 
             while (!headerParsed) {
                 char ch;
-                ssize_t rn = read(new_socket, &ch, 1);
-                if (rn <= 0) {
+                ssize_t n = read(new_socket, &ch, 1);
+                if (n <= 0) {
                     if (errno == EAGAIN || errno == EWOULDBLOCK) {
                         this_thread::sleep_for(chrono::milliseconds(5));
                         continue;
@@ -100,9 +99,12 @@ void startServer(const string &className) {
                         break;
                     }
                 }
+                data->push_back(ch);
                 headerBuf += ch;
+
                 if (headerBuf.size() >= 4 && headerBuf.substr(headerBuf.size() - 4) == "\r\n\r\n") {
                     headerParsed = true;
+
                     size_t clPos = headerBuf.find("Content-Length:");
                     if (clPos != string::npos) {
                         clPos += strlen("Content-Length:");
@@ -113,12 +115,13 @@ void startServer(const string &className) {
                         try {
                             contentLength = stoul(clStr);
                         } catch (...) {
-                            string res = Response<string>().build(400, "??", new string());
+                            string res = Response<string>().build(400, "Content-Length invalid", new string());
                             send(new_socket, res.c_str(), res.size(), 0);
                             close(new_socket);
                             isError = true;
                             break;
                         }
+
                         if (contentLength > MAX_CONTENT_LENGTH) {
                             string res = Response<string>().build(413, "Request qua lon", new string());
                             send(new_socket, res.c_str(), res.size(), 0);
@@ -129,21 +132,18 @@ void startServer(const string &className) {
                     } else {
                         contentLength = 0;
                     }
+
                     size_t bodyStart = headerBuf.find("\r\n\r\n");
-                    if (bodyStart != string::npos) {
-                        size_t bodyOffset = bodyStart + 4;
-                        size_t extra = headerBuf.size() - bodyOffset;
-                        if (extra > 0) {
-                            if (extra > contentLength) {
-                                string res = Response<string>().build(413, "Request qua lon", new string());
-                                send(new_socket, res.c_str(), res.size(), 0);
-                                close(new_socket);
-                                isError = true;
-                                break;
-                            }
-                            data->insert(data->end(), headerBuf.begin() + bodyOffset, headerBuf.end());
-                            totalBodyRead += extra;
+                    size_t extra = headerBuf.size() - (bodyStart + 4);
+                    if (extra > 0) {
+                        if (extra > contentLength) {
+                            string res = Response<string>().build(413, "Request qua lon", new string());
+                            send(new_socket, res.c_str(), res.size(), 0);
+                            close(new_socket);
+                            isError = true;
+                            break;
                         }
+                        totalBodyRead += extra;
                     }
                     break;
                 }
@@ -152,7 +152,7 @@ void startServer(const string &className) {
             if (!isError && totalBodyRead < contentLength) {
                 while (totalBodyRead < contentLength) {
                     size_t toRead = std::min(READ_CHUNK, contentLength - totalBodyRead);
-                    n = read(new_socket, buffer, toRead);
+                    ssize_t n = read(new_socket, buffer, toRead);
                     if (n > 0) {
                         if (totalBodyRead + static_cast<size_t>(n) > MAX_CONTENT_LENGTH) {
                             string res = Response<string>().build(413, "Request qua lon", new string());
