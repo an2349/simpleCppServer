@@ -8,20 +8,31 @@
 #include <string>
 #include <filesystem>
 #include "../Model/MultiPartModel.h"
+#include "../Model/Response.h"
+
 using namespace std;
 namespace fs = std::filesystem;
 
 class FileUpLoadServices {
 private:
-    string filePath ="../uploads";
+    string filePath = "../uploads";
     mutex mtx;
-public://FileUpLoadServices(){}
+
+    struct FileStatus {
+        bool isUpload = false;
+        bool isSave = false;
+    };
+
+public:
     FileUpLoadServices() {
         if (!fs::exists(filePath)) {
-            fs::create_directories(filePath);}
+            fs::create_directories(filePath);
+        }
     }
-    future<bool> UpLoadAsync(MultiPartModel* multipart,const string& boundary);
-    bool SaveFileAsync(MultiPartModel* multipart,const string& boundary);
+
+    future<string> UpLoadAsync(MultiPartModel *multipart, const string &boundary);
+
+    FileStatus SaveFileAsync(MultiPartModel *multipart, const string &boundary);
 };
 
 

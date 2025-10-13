@@ -7,6 +7,9 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include "nlohmann/json.hpp"
+
+using nlohmann::json;
 using namespace std;
 
 class MultiPartModel {
@@ -18,9 +21,9 @@ public:
     string   contentType   = "";
     size_t   totalSize     = 0;
     vector<uint8_t>  value   ;
-    static MultiPartModel bindMultiPart(vector<char>* body, const string& boundary);
-    static vector<MultiPartModel> bindMultiParts(vector<char>* request, const string& boundary) {
-        vector<MultiPartModel> parts;
+    static MultiPartModel* bindMultiPart(vector<char>* body, const string& boundary);
+    static vector<MultiPartModel*> bindMultiParts(vector<char>* request, const string& boundary) {
+        vector<MultiPartModel*> parts;
         string delimiter = "--" + boundary;
         size_t start = 0;
 
@@ -58,9 +61,8 @@ public:
 
             if (partData->size() >= 2 && (*partData)[0] == '-' && (*partData)[1] == '-') break;
 
-            MultiPartModel part = bindMultiPart(partData, boundary);
+            MultiPartModel* part = bindMultiPart(partData, boundary);
             parts.push_back(part);
-
             start = partEnd;
         }
 
@@ -72,6 +74,11 @@ inline string trim(const string& s) {
     size_t end = s.find_last_not_of("\r\n ");
     if (start == string::npos || end == string::npos) return "";
     return s.substr(start, end - start + 1);
+}
+inline void to_json(json& j, const MultiPartModel& p) {
+    j = json{{"Name",      p.name},
+             {"Size",      p.totalSize}};//,
+    //{"TotalPart",        p.totalPart} };
 }
 
 

@@ -6,8 +6,8 @@
 
 #include <algorithm>
 #include <sstream>
-MultiPartModel MultiPartModel::bindMultiPart(vector<char>* request, const string& boundary) {
-    MultiPartModel model;
+MultiPartModel* MultiPartModel::bindMultiPart(vector<char>* request, const string& boundary) {
+    MultiPartModel* model = new MultiPartModel();
 
     if (!request || request->empty()) return model;
 
@@ -32,39 +32,39 @@ MultiPartModel MultiPartModel::bindMultiPart(vector<char>* request, const string
             if (fnamePos != string::npos) {
                 fnamePos += 10;
                 size_t fnameEnd = line.find("\"", fnamePos);
-                model.name = line.substr(fnamePos, fnameEnd - fnamePos);
+                model->name = line.substr(fnamePos, fnameEnd - fnamePos);
             }
 
             size_t partPos = line.find("part=\"");
             if (partPos != string::npos) {
                 partPos += 6;
                 size_t partEnd = line.find("\"", partPos);
-                model.part = stoi(trim(line.substr(partPos, partEnd - partPos)));
+                model->part = stoi(trim(line.substr(partPos, partEnd - partPos)));
             }
 
             size_t totalPos = line.find("total=\"");
             if (totalPos != string::npos) {
                 totalPos += 7;
                 size_t totalEnd = line.find("\"", totalPos);
-                model.totalPart = stoi(trim(line.substr(totalPos, totalEnd - totalPos)));
+                model->totalPart = stoi(trim(line.substr(totalPos, totalEnd - totalPos)));
             }
 
             size_t sizePos = line.find("size=\"");
             if (sizePos != string::npos) {
                 sizePos += 6;
                 size_t sizeEnd = line.find("\"", sizePos);
-                model.totalSize = stoi(trim(line.substr(sizePos, sizeEnd - sizePos)));
+                model->totalSize = stoi(trim(line.substr(sizePos, sizeEnd - sizePos)));
             }
         }
         else if (line.find("Content-Type:") != string::npos) {
             size_t ctPos = line.find(":");
             if (ctPos != string::npos) {
-                model.contentType = trim(line.substr(ctPos + 1));
+                model->contentType = trim(line.substr(ctPos + 1));
             }
         }
     }
 
-    model.value = vector<uint8_t>(bodyRaw.begin(), bodyRaw.end());
+    model->value = vector<uint8_t>(bodyRaw.begin(), bodyRaw.end());
 
     return model;
 }
