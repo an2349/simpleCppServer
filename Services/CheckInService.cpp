@@ -12,19 +12,21 @@ future<string> CheckInService::CheckInAsync(const string& maSv,const string& mac
         }
 
         try {
-            CacheService cacheService;
-            auto sivi = cacheService.checkSinhVien(maSv, macAdress).get();
+            auto sivi = cacheService->checkSinhVien(maSv, macAdress).get();
             sinhVien ->Mac = macAdress;
             sinhVien ->MaSv = sivi.MaSv;
             sinhVien ->FullName = sivi.FullName;
             sinhVien ->ClassName = sivi.ClassName;
             if (sivi.MaSv == "") {
+                dbPool.closeConn(conn);
                 return response.build(400,"Sinh vien khong ton tai trong lop",sinhVien);
             }
             else if (sivi.Mac !="" && sivi.Mac!= macAdress) {
+                dbPool.closeConn(conn);
                 return response.build(400,"Khong phai thiet bi dang ky cua sinh vien",sinhVien);
             }
             else if (sivi.IsCheckIn) {
+                dbPool.closeConn(conn);
                 return response.build(400,"Sinh vien da diem danh roi",sinhVien);
             }
             auto i = CheckInSinhVien(conn,maSv,sinhVien->Mac);
@@ -34,7 +36,7 @@ future<string> CheckInService::CheckInAsync(const string& maSv,const string& mac
                 return response.build(400,"loi xu li,vui long thu lai",sinhVien);
             }
             dbPool.closeConn(conn);
-            cacheService.updateSinhVien(maSv, macAdress);
+            cacheService->updateSinhVien(maSv, macAdress);
             return response.build(200,"Sinh Vien "+ sinhVien->FullName +" diem danh thanh cong",sinhVien);
         }
         catch (...) {

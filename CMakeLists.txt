@@ -18,7 +18,6 @@ add_executable(LTHTM #../Server.cpp
         Repo/DbPool.h
         Repo/Querry.cpp
         Repo/Querry.h
-        Repo/PoolManager.h
         Repo/SinhVienRepo.cpp
         Repo/SinhVienRepo.h
         Model/ContentModel.cpp
@@ -32,5 +31,6 @@ add_executable(LTHTM #../Server.cpp
         Model/Cache.cpp
         Model/Cache.h
         Services/CacheService.cpp
-        Services/CacheService.h)
+        Services/CacheService.h
+)
 target_link_libraries(LTHTM PRIVATE /usr/lib/x86_64-linux-gnu/libmysqlcppconn.so)

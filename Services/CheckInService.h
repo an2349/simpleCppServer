@@ -8,21 +8,30 @@
 #include "../Model/SinhVien.h"
 #include <future>
 #include <string>
-#include "../Repo/PoolManager.h"
+#include "CacheService.h"
 #include "../Repo/SinhVienRepo.h"
 #include "../Repo/Querry.h"
 #include "../Model/Cache.h"
+#include "../Repo/DbPool.h"
+class CacheService;
+class DBPool;
 using namespace std;
 
 class CheckInService {
 private:
     DBPool& dbPool;
     SinhVienRepo repo;
+    CacheService* cacheService;// = nullptr;
     Querry querry;
     future<SinhVien> CheckSinhVien(shared_ptr<DBConnection>& conn,const string& maSv);
     future<bool> CheckInSinhVien(shared_ptr<DBConnection>& conn,const string& maSv,string& macAdress);
 public:
-    CheckInService(): dbPool(g_DBPool) {}
+    void setCacheService(CacheService& cache) {
+        this->cacheService = &cache;
+    }
+    CheckInService(DBPool& dbPools) : dbPool(dbPools) {
+    }
+
     future<vector<struct DiemDanh>> GetAllSinhVien(const string& className);
     future<string> CheckInAsync(const string& maSv, const string& macAdress);
 };

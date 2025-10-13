@@ -16,11 +16,14 @@ using namespace std;
 
 class Controller {
 public:
-    Controller() {}
+    Controller(CheckInService& checkInServices, FileUpLoadServices& fileUpLoadServices)
+    : checkInService(checkInServices), fileService(fileUpLoadServices){}
+
     future<string> handleRequestAsync(vector<char>* req);
+
 private:
-    CheckInService checkInService;
-    FileUpLoadServices fileService;
+    CheckInService& checkInService;
+    FileUpLoadServices& fileService;
 
     enum class methods{ POST ,PUT,NOT };
     string GetMethod(const string& req );

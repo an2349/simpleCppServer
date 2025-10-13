@@ -9,16 +9,18 @@
 #include "CheckInService.h"
 
 using namespace std;
+class CheckInService;
+
 
 class CacheService {
     public:
     Cache& cache;
-    CacheService() : cache(Cache::getInstance()) {}
+    CacheService(CheckInService& checkInServices) :cache(Cache::getInstance()), checkInService(checkInServices) {}
     void loadCache(const string& className);
     future<struct DiemDanh> checkSinhVien (const string& maSv, const string& macAdress);
     void updateSinhVien(const string& maSv, const string& macAdress);
 private:
-    CheckInService checkInService;
+    CheckInService& checkInService;
 };
 
 
