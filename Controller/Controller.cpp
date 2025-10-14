@@ -6,8 +6,8 @@
 #include <regex>
 using namespace std;
 
-future<string> Controller::handleRequestAsync(vector<char> *request) {
-    return async(launch::async, [request, this]() {
+future<string> Controller::handleRequestAsync(vector<char> *request,const string& clientMAC) {
+    return async(launch::async, [request, this, &clientMAC]() {
         string req(request->begin(), request->end());
         Response<string> response;
         try {
@@ -18,6 +18,7 @@ future<string> Controller::handleRequestAsync(vector<char> *request) {
             }
             string method = GetMethod(req);
             methods checkedMethod = CheckMethod(method);
+            cout<<method<<endl;
             if (checkedMethod == methods::NOT) {
                 return response.build(400, "Phương thức khôgn hợp lệ", new string(""));
             }
@@ -38,7 +39,9 @@ future<string> Controller::handleRequestAsync(vector<char> *request) {
                 string maSv = requestModel->MaSv.empty() ? "" : requestModel->MaSv;
                 string macAdress = requestModel->Mac.empty() ? "" : requestModel->Mac;
                 delete requestModel;
-                if (maSv == "" || macAdress == "" || !Validate(maSv) || Validate(macAdress)) {
+                if (maSv == "" || macAdress == ""
+                    || !Validate(maSv) || !Validate(macAdress)
+                    || clientMAC != macAdress || clientMAC =="") {
                     return response.build(400, "khong hop le", new string(""));
                 }
                 return checkInService.CheckInAsync(maSv, macAdress).get();

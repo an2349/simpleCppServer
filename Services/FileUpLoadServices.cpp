@@ -15,7 +15,7 @@ future<string> FileUpLoadServices::UpLoadAsync(MultiPartModel *multipart, const 
             FileStatus fileStatus = SaveFileAsync(multipart, boundary);
             if (fileStatus.isUpload == true) {
                 if (fileStatus.isSave == false) {
-                    return response.build(200, "Nhan ok", multipart);
+                    return response.build(203, "Nhan ok", multipart);
                 }
                 return response.build(200, "Upload thanh cong", multipart);
             }
@@ -58,7 +58,7 @@ FileUpLoadServices::FileStatus FileUpLoadServices::SaveFileAsync(MultiPartModel 
         }
         if (allChunksPresent) {
             string timestamp = to_string(time(nullptr));
-            string finalFile = filePath + "/" + multipart->name + "_" + timestamp;
+            string finalFile = filePath + "/" + timestamp + "_" + multipart->name;
             ofstream ofsFinal(finalFile, ios::binary);
             if (!ofsFinal.is_open()) {
                 std::cout << "loi ghep chunk";

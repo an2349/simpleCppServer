@@ -19,6 +19,22 @@ CheckInService *checkInService = nullptr;
 CacheService *cacheService = nullptr;
 FileUpLoadServices *fileUpLoadService = nullptr;
 
+string getMAC(const string &ip) {
+    FILE *arpCache = fopen("/proc/net/arp", "r");
+    if (!arpCache) return "";
+    char line[256];
+    fgets(line, sizeof(line), arpCache);
+    while (fgets(line, sizeof(line), arpCache)) {
+        char ipAddr[32], hwType[32], flags[32], mac[32], mask[32], device[32];
+        sscanf(line, "%31s %31s %31s %31s %31s %31s", ipAddr, hwType, flags, mac, mask, device);
+        if (ip == ipAddr) {
+            fclose(arpCache);
+            return string(mac);
+        }
+    }
+    fclose(arpCache);
+    return "";
+}
 void deletePointer() {
     delete controller;
     controller = nullptr;
@@ -73,8 +89,13 @@ void startServer(const string &className) {
         if ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen)) < 0) {
             continue;
         }
-
-        futures.push_back(async(launch::async, [new_socket]() {
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &address.sin_addr, client_ip, INET_ADDRSTRLEN);
+        string mac = getMAC(client_ip);
+        cout << client_ip;
+        cout << ":" << ntohs(address.sin_port);
+        cout << "\nMAC: " << mac << "\nVua thuc hien " ;
+        futures.push_back(async(launch::async, [new_socket, &mac]() {
             vector<char> *data = new vector<char>();
             bool isError = false;
             int flags = fcntl(new_socket, F_GETFL, 0);
@@ -178,7 +199,7 @@ void startServer(const string &className) {
             }
 
             if (!isError) {
-                auto response_future = controller->handleRequestAsync(data);
+                auto response_future = controller->handleRequestAsync(data,mac);
                 string response = response_future.get();
                 delete data;
                 send(new_socket, response.c_str(), response.size(), 0);
