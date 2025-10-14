@@ -199,7 +199,7 @@ void startServer(const string &className) {
             }
 
             if (!isError) {
-                auto response_future = controller->handleRequestAsync(data,mac);
+                future<string> response_future = controller->handleRequestAsync(data,mac);
                 string response = response_future.get();
                 delete data;
                 send(new_socket, response.c_str(), response.size(), 0);

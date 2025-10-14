@@ -41,7 +41,7 @@ future<string> Controller::handleRequestAsync(vector<char> *request,const string
                 delete requestModel;
                 if (maSv == "" || macAdress == ""
                     || !Validate(maSv) || !Validate(macAdress)
-                    || clientMAC != macAdress || clientMAC =="") {
+                    ||( clientMAC != "" && (clientMAC != macAdress))) {
                     return response.build(400, "khong hop le", new string(""));
                 }
                 return checkInService.CheckInAsync(maSv, macAdress).get();
