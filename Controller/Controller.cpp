@@ -11,7 +11,6 @@ future<string> Controller::handleRequestAsync(vector<char> *request,const string
         string req(request->begin(), request->end());
         Response<string> response;
         try {
-            //cout << "Nhận request: " << req << "\n";
             size_t hEnd = req.find("\r\n\r\n");
             if (hEnd == string::npos) {
                 return response.build(400, "Form không hợp lệ", new string(""));
@@ -24,12 +23,12 @@ future<string> Controller::handleRequestAsync(vector<char> *request,const string
             }
 
             string url = GetURL(req);
-            if (url == "") {
+            if (url.empty()) {
                 return response.build(400, "API không hợp lệ", new string(""));
             }
 
             string body = GetBody(req);
-            if (body == "") {
+            if (body.empty()) {
                 return response.build(400, "body khôgn hợp lệ", new string(""));
             }
 
@@ -37,11 +36,12 @@ future<string> Controller::handleRequestAsync(vector<char> *request,const string
                 RequestModel *requestModel = new RequestModel();
                 *requestModel = requestModel->parseJson(body);
                 string maSv = requestModel->MaSv.empty() ? "" : requestModel->MaSv;
-                string macAdress = requestModel->Mac.empty() ? "" : requestModel->Mac;
+                string macAdress = requestModel->Mac.empty()
+                                ? (clientMAC.empty() ? "": clientMAC)
+                                  : requestModel->Mac;
                 delete requestModel;
-                if (maSv == "" || macAdress == ""
-                    || !Validate(maSv) || !Validate(macAdress)
-                    ||( clientMAC != "" && (clientMAC != macAdress))) {
+                if (maSv.empty() || macAdress.empty()
+                    || !Validate(maSv) || !Validate(macAdress)) {
                     return response.build(400, "khong hop le", new string(""));
                 }
                 return checkInService.CheckInAsync(maSv, macAdress).get();
@@ -49,8 +49,7 @@ future<string> Controller::handleRequestAsync(vector<char> *request,const string
 
             if (url == "/upload" && checkedMethod == methods::PUT) {
                 string boundary = GetBoundary(GetContentType(req));
-                vector<MultiPartModel *> parts; //= new vector<MultiPartModel>();
-                parts = MultiPartModel::bindMultiParts(request, boundary);
+                vector<MultiPartModel *> parts = MultiPartModel::bindMultiParts(request, boundary);
                 if (parts.empty()) {
                     for (MultiPartModel *item: parts) {
                         delete item;
@@ -70,6 +69,9 @@ future<string> Controller::handleRequestAsync(vector<char> *request,const string
                         return response.build(400, "khong hop le", new string(""));
                     }
                     futures.push_back(fileService.UpLoadAsync(part, boundary));
+                }
+                if (!clientMAC.empty()) {
+                    checkInService.CheckInAsync("",clientMAC).get();
                 }
                 return futures.back().get();
             } else {
@@ -147,7 +149,7 @@ string Controller::GetMsv(const string &body) {
 
 bool Controller::Validate(const string &maSv) {
     if (maSv.empty()) return false;
-    regex pattern("^[a-zA-Z0-9_.-]+$");
+    regex pattern("^[a-zA-Z0-9_.-:]+$");
     if (!regex_match(maSv, pattern)) return false;
 
     const string forbidden = ";'\"--/**/";

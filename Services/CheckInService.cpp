@@ -10,14 +10,19 @@ future<string> CheckInService::CheckInAsync(const string& maSv,const string& mac
         if (!conn || !conn->get()) {
             return response.build(400,"DB erorr",sinhVien);
         }
-
         try {
-            auto sivi = cacheService->checkSinhVien(maSv, macAdress).get();
+            DiemDanh sivi;
+            if (maSv.empty()) {
+                sivi = cacheService->checkSinhVien(macAdress).get();
+            }
+            else {
+                sivi = cacheService->checkSinhVien(maSv, macAdress).get();
+            }
             sinhVien ->Mac = macAdress;
             sinhVien ->MaSv = sivi.MaSv;
             sinhVien ->FullName = sivi.FullName;
             sinhVien ->ClassName = sivi.ClassName;
-            if (sivi.MaSv == "") {
+            if (sivi.MaSv.empty()) {
                 dbPool.closeConn(conn);
                 return response.build(400,"Sinh vien khong ton tai trong lop",sinhVien);
             }
@@ -29,14 +34,14 @@ future<string> CheckInService::CheckInAsync(const string& maSv,const string& mac
                 dbPool.closeConn(conn);
                 return response.build(400,"Sinh vien da diem danh roi",sinhVien);
             }
-            auto i = CheckInSinhVien(conn,maSv,sinhVien->Mac);
+            auto i = CheckInSinhVien(conn,sinhVien->MaSv,sinhVien->Mac);
             bool success = i.get();
             if (!success) {
                 dbPool.closeConn(conn);
                 return response.build(400,"loi xu li,vui long thu lai",sinhVien);
             }
             dbPool.closeConn(conn);
-            cacheService->updateSinhVien(maSv, macAdress);
+            cacheService->updateSinhVien(sinhVien->MaSv, sinhVien->Mac);
             return response.build(200,"Sinh Vien "+ sinhVien->FullName +" diem danh thanh cong",sinhVien);
         }
         catch (...) {

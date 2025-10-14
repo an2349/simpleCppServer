@@ -21,6 +21,17 @@ future<DiemDanh> CacheService::checkSinhVien(const string& maSv,const string& ma
         return DiemDanh{false, "",""};
     });
 }
+future<DiemDanh> CacheService::checkSinhVien(const string& macAdress) {
+    return async(launch::async, [this, macAdress]() -> DiemDanh {
+        shared_lock lock(cache.cacheMutex);
+        auto it = cache.danhSachSV.find(macAdress);
+        if (it != cache.danhSachSV.end()) {
+            DiemDanh &dd = it->second;
+            return dd;
+        }
+        return DiemDanh{false, "",""};
+    });
+}
 void CacheService::updateSinhVien(const string& maSv, const string& macAdress) {
     unique_lock lock(cache.cacheMutex);
     auto it = cache.danhSachSV.find(maSv);
