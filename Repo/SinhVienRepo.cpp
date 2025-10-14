@@ -2,12 +2,14 @@
 #include "DbPool.h"
 //#include "../Model/Cache.h"
 
-bool SinhVienRepo::DiemDanh(const shared_ptr<DBConnection>& conn, const string& query) {
+bool SinhVienRepo::DiemDanh(const shared_ptr<DBConnection>& conn, const string& maSv, const string& macAdress) {
     if (!conn || !conn->get()) return false;
     try {
         unique_ptr<sql::PreparedStatement> sql(
-            conn->get()->prepareStatement(query)
+            conn->get()->prepareStatement("CALL proc_diem_danh_tong_hop(?, ?)")
         );
+        sql->setString(1, maSv);
+        sql->setString(2, macAdress);
         sql->executeUpdate();
         while (sql->getMoreResults()) {
             unique_ptr<sql::ResultSet> trash(sql->getResultSet());

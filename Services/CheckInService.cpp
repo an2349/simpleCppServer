@@ -57,7 +57,7 @@ future<string> CheckInService::CheckInAsync(const string& maSv,const string& mac
 }
 future<bool> CheckInService::CheckInSinhVien(shared_ptr<DBConnection>& conn,const string& maSv,string& macAdress) {
     return async(launch::async, [maSv, this, macAdress, conn]() {
-        return repo.DiemDanh(conn,querry.GetQuerry(Querry::querryType::InsertDiemDanh,maSv,macAdress));
+        return repo.DiemDanh(conn,maSv,macAdress);
     });
 }
 

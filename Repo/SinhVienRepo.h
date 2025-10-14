@@ -15,7 +15,7 @@ using  namespace  std;
 class SinhVienRepo {
 public:
     SinhVienRepo(){}
-    bool DiemDanh(const shared_ptr<DBConnection>& conn,const string& querry);
+    bool DiemDanh(const shared_ptr<DBConnection>& conn, const string& maSv,const string& macAdress);
     SinhVien KiemTra(const shared_ptr<DBConnection>& conn,const string& querry);
     vector<struct DiemDanh> GetAllSinhVien(const shared_ptr<DBConnection>& conn,const string& className);
 };
