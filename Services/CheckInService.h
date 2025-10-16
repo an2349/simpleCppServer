@@ -23,8 +23,8 @@ private:
     SinhVienRepo repo;
     CacheService* cacheService;// = nullptr;
     Querry querry;
-    future<SinhVien> CheckSinhVien(shared_ptr<DBConnection>& conn,const string& maSv);
-    future<bool> CheckInSinhVien(shared_ptr<DBConnection>& conn,const string& maSv,string& macAdress);
+    SinhVien CheckSinhVien(shared_ptr<DBConnection>& conn,const string& maSv);
+    bool CheckInSinhVien(shared_ptr<DBConnection>& conn,const string& maSv,string& macAdress);
 public:
     void setCacheService(CacheService& cache) {
         this->cacheService = &cache;
@@ -32,7 +32,7 @@ public:
     CheckInService(DBPool& dbPools) : dbPool(dbPools) {
     }
 
-    future<vector<struct DiemDanh>> GetAllSinhVien(const string& className);
+    vector<struct DiemDanh> GetAllSinhVien(const string& className);
     future<string> CheckInAsync(const string& maSv, const string& macAdress);
 };
 

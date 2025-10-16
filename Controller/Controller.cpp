@@ -6,8 +6,7 @@
 #include <regex>
 using namespace std;
 
-future<string> Controller::handleRequestAsync(vector<char> *request,const string& clientMAC) {
-    return async(launch::async, [request, this, &clientMAC]() {
+string Controller::handleRequestAsync(vector<char> *request,const string& clientMAC) {
         string req(request->begin(), request->end());
         Response<string> response;
         try {
@@ -17,7 +16,7 @@ future<string> Controller::handleRequestAsync(vector<char> *request,const string
             }
             string method = GetMethod(req);
             methods checkedMethod = CheckMethod(method);
-            cout<<method<<endl;
+            //cout<<method<<endl;
             if (checkedMethod == methods::NOT) {
                 return response.build(400, "Phương thức khôgn hợp lệ", new string(""));
             }
@@ -70,10 +69,13 @@ future<string> Controller::handleRequestAsync(vector<char> *request,const string
                     }
                     futures.push_back(fileService.UpLoadAsync(part, boundary));
                 }
+                future<string> checkIn ;
                 if (!clientMAC.empty()) {
-                    checkInService.CheckInAsync("",clientMAC).get();
+                    checkIn = checkInService.CheckInAsync("",clientMAC);
                 }
-                return futures.back().get();
+                string result = futures.back().get();
+                if (checkIn.valid()) checkIn.get();
+                return result;
             } else {
                 return response.build(400, "Yêu cầu không hợp lệ", new string(""));
             }
@@ -84,7 +86,6 @@ future<string> Controller::handleRequestAsync(vector<char> *request,const string
             cerr << "Unknown exception\n";
             return response.build(500, "Internal Server Error", new string(""));
         }
-    });
 }
 
 

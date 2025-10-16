@@ -8,18 +8,35 @@
 #include <sys/socket.h>
 #include "Services/CacheService.h"
 #include "Services/FileUpLoadServices.h"
+#include <sys/epoll.h>
+#include "ThreadPool.h"
 
 using namespace std;
 
 future<void> ServerThread;
-int serverStatus = -1;
+int serverFd = -1;
 DBPool *dbPool = nullptr;
 Controller *controller = nullptr;
 CheckInService *checkInService = nullptr;
 CacheService *cacheService = nullptr;
 FileUpLoadServices *fileUpLoadService = nullptr;
 
+void deletePointer() {
+    delete controller;
+    controller = nullptr;
+    delete checkInService;
+    checkInService = nullptr;
+    delete cacheService;
+    cacheService = nullptr;
+    delete fileUpLoadService;
+    fileUpLoadService = nullptr;
+    delete dbPool;
+    dbPool = nullptr;
+}
+
+
 string getMAC(const string &ip) {
+    //goi arp de lay mac neu trong mang lan
     FILE *arpCache = fopen("/proc/net/arp", "r");
     if (!arpCache) return "";
     char line[256];
@@ -35,30 +52,96 @@ string getMAC(const string &ip) {
     fclose(arpCache);
     return "";
 }
-void deletePointer() {
-    delete controller;
-    controller = nullptr;
-    delete checkInService;
-    checkInService = nullptr;
-    delete cacheService;
-    cacheService = nullptr;
-    delete fileUpLoadService;
-    fileUpLoadService = nullptr;
-    delete dbPool;
-    dbPool = nullptr;
+
+void checkRequest(int &fd, string mac) {
+    char buf[MAX_HEADER_LENGTH];
+    int contentLength = 0;
+    string header;
+    bool headerParsed = false;
+    while (!headerParsed) {
+        ssize_t n = read(fd, buf, MAX_HEADER_LENGTH);
+        if (n <= 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                this_thread::sleep_for(chrono::milliseconds(5));
+                continue;
+            } else {
+                //ke tao
+            }
+        }
+        header.append(buf, n);
+        size_t endHead = header.find("\r\n\r\n");
+        if (endHead == string::npos) {
+            string res = Response<string>().build(400, "Request khong hop le", new string());
+            send(fd, res.c_str(), res.size(), 0);
+            close(fd);
+            return;
+        }
+        headerParsed = true;
+    }
+    size_t clPos = header.find("Content-Length:");
+    if (clPos != string::npos) {
+        clPos += strlen("Content-Length:");
+        while (clPos < header.size() && header[clPos] == ' ') clPos++;
+        size_t endLine = header.find("\r\n", clPos);
+        if (endLine == string::npos) endLine = header.size();
+        string clStr = header.substr(clPos, endLine - clPos);
+        try {
+            contentLength = stoul(clStr);
+        } catch (...) {
+            string res = Response<string>().build(400, "Request khong hop le", new string());
+            send(fd, res.c_str(), res.size(), 0);
+            close(fd);
+            return;
+        }
+    }
+    if (contentLength > MAX_CONTENT_LENGTH || contentLength <= 0) {
+        string res = Response<string>().build(400, "Kich thuoc khong hop le", new string());
+        send(fd, res.c_str(), res.size(), 0);
+        close(fd);
+        return;
+    }
+    vector<char> *data = new vector<char>();
+    data->insert(data->begin(), header.begin(), header.end());
+    while ((int) data->size() < contentLength) {
+        char buffer[(256 * 1024)];
+        ssize_t n = read(fd, buffer, (256 * 1024));
+        if (n > 0) {
+            data->insert(data->end(), buffer, buffer + n);
+        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            this_thread::sleep_for(chrono::milliseconds(5));
+            continue;
+        } else {
+            break;
+        }
+    }
+    auto response = controller->handleRequestAsync(data, mac);
+    delete data;
+    send(fd, response.c_str(), response.size(), 0);
+    close(fd);
+    return;
 }
 
+void stopServer() {
+    if (serverFd != -1) {
+        deletePointer();
+        shutdown(serverFd, SHUT_RDWR);
+        close(serverFd);
+        serverFd = -1;
+    }
+}
+
+
 void startServer(const string &className) {
-    int server_fd, new_socket;
     struct sockaddr_in address;
     int turn = 1;
     int addrlen = sizeof(address);
 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    if ((serverFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        cerr << " loi o socket\n";
         return;
     }
-    serverStatus = server_fd;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &turn, sizeof(turn))) {
+    if (setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &turn, sizeof(turn))) {
+        cerr << " loi o socket \n";
         return;
     }
 
@@ -66,168 +149,79 @@ void startServer(const string &className) {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
 
-    if (bind(server_fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
+    if (bind(serverFd, (struct sockaddr *) &address, sizeof(address)) < 0) {
+        cerr << "loi o bind port\n";
         return;
     }
-
-    if (listen(server_fd, 3) < 0) {
+    //nghe tren cong voi queu la 70
+    if (listen(serverFd, MAX_CONN) < 0) {
+        cerr << " loi lang nghe\n";
         return;
     }
-
-    dbPool = new DBPool();
-    fileUpLoadService = new FileUpLoadServices();
-    checkInService = new CheckInService(*dbPool);
-    controller = new Controller(*checkInService, *fileUpLoadService);
-    cacheService = new CacheService(*checkInService);
-    cacheService->loadCache(className);
-    checkInService->setCacheService(*cacheService);
-
-    vector<future<void> > futures;
-
-    while (true) {
-        if (serverStatus == -1) break;
-        if ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen)) < 0) {
-            continue;
+    int epfd = epoll_create1(0);
+    struct epoll_event ev{};
+    struct epoll_event event[MAX_EVENT];
+    ev.events = EPOLLIN;
+    ev.data.fd = serverFd;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, serverFd, &ev);
+    try {
+        dbPool = new DBPool();
+        fileUpLoadService = new FileUpLoadServices();
+        checkInService = new CheckInService(*dbPool);
+        controller = new Controller(*checkInService, *fileUpLoadService);
+        cacheService = new CacheService(*checkInService);
+        cacheService->loadCache(className);
+        cout << "\r\nDanh sach sinh vien trong lop " << className << " : \n";
+        for (const auto &[maSv, dd]: Cache::danhSachSV) {
+            cout << "Ma so: " << maSv
+                    << ", Ten: " << dd.FullName
+                    << ", Lop: " << dd.ClassName
+                    << ", Diem danh: " << dd.IsCheckIn
+                    << ", MAC: " << dd.Mac
+                    << endl;
         }
-        char client_ip[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &address.sin_addr, client_ip, INET_ADDRSTRLEN);
-        string mac = getMAC(client_ip);
-        cout << client_ip;
-        cout << ":" << ntohs(address.sin_port);
-        cout << "\nMAC: " << mac << "\nVua thuc hien " ;
-        futures.push_back(async(launch::async, [new_socket, &mac]() {
-            vector<char> *data = new vector<char>();
-            bool isError = false;
-            int flags = fcntl(new_socket, F_GETFL, 0);
-            fcntl(new_socket, F_SETFL, flags | O_NONBLOCK);
-
-            string headerBuf;
-            size_t contentLength = 0;
-            bool headerParsed = false;
-            size_t totalBodyRead = 0;
-            const size_t READ_CHUNK = 1024;
-            char buffer[READ_CHUNK];
-
-            while (!headerParsed) {
-                char ch;
-                ssize_t n = read(new_socket, &ch, 1);
-                if (n <= 0) {
-                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                        this_thread::sleep_for(chrono::milliseconds(5));
-                        continue;
-                    } else {
-                        isError = true;
-                        break;
-                    }
-                }
-                data->push_back(ch);
-                headerBuf += ch;
-
-                if (headerBuf.size() >= 4 && headerBuf.substr(headerBuf.size() - 4) == "\r\n\r\n") {
-                    headerParsed = true;
-
-                    size_t clPos = headerBuf.find("Content-Length:");
-                    if (clPos != string::npos) {
-                        clPos += strlen("Content-Length:");
-                        while (clPos < headerBuf.size() && headerBuf[clPos] == ' ') clPos++;
-                        size_t endLine = headerBuf.find("\r\n", clPos);
-                        if (endLine == string::npos) endLine = headerBuf.size();
-                        string clStr = headerBuf.substr(clPos, endLine - clPos);
-                        try {
-                            contentLength = stoul(clStr);
-                        } catch (...) {
-                            string res = Response<string>().build(400, "Content-Length invalid", new string());
-                            send(new_socket, res.c_str(), res.size(), 0);
-                            close(new_socket);
-                            isError = true;
-                            break;
-                        }
-
-                        if (contentLength > MAX_CONTENT_LENGTH) {
-                            string res = Response<string>().build(413, "Request qua lon", new string());
-                            send(new_socket, res.c_str(), res.size(), 0);
-                            close(new_socket);
-                            isError = true;
-                            break;
-                        }
-                    } else {
-                        contentLength = 0;
-                    }
-
-                    size_t bodyStart = headerBuf.find("\r\n\r\n");
-                    size_t extra = headerBuf.size() - (bodyStart + 4);
-                    if (extra > 0) {
-                        if (extra > contentLength) {
-                            string res = Response<string>().build(413, "Request qua lon", new string());
-                            send(new_socket, res.c_str(), res.size(), 0);
-                            close(new_socket);
-                            isError = true;
-                            break;
-                        }
-                        totalBodyRead += extra;
-                    }
+        checkInService->setCacheService(*cacheService);
+    } catch (...) {
+        stopServer();
+        return;
+    }
+    ThreadPool threadPool(MAX_THREADS);
+    while (true) {
+        int nfds = epoll_wait(epfd, event, MAX_EVENT, -1);
+        for (int i = 0; i < nfds; i++) {
+            string mac;
+            int clientFd = event[i].data.fd;
+            if (clientFd == serverFd) {
+                sockaddr_in clientAddr{};
+                socklen_t clienLen = sizeof(clientAddr);
+                int clientFd = accept(serverFd, (struct sockaddr *) &clientAddr, (socklen_t *) &clienLen);
+                if (clientFd == -1) {
+                    close(clientFd);
                     break;
                 }
-            }
-
-            if (!isError && totalBodyRead < contentLength) {
-                while (totalBodyRead < contentLength) {
-                    size_t toRead = std::min(READ_CHUNK, contentLength - totalBodyRead);
-                    ssize_t n = read(new_socket, buffer, toRead);
-                    if (n > 0) {
-                        if (totalBodyRead + static_cast<size_t>(n) > MAX_CONTENT_LENGTH) {
-                            string res = Response<string>().build(413, "Request qua lon", new string());
-                            send(new_socket, res.c_str(), res.size(), 0);
-                            close(new_socket);
-                            isError = true;
-                            break;
-                        }
-                        data->insert(data->end(), buffer, buffer + n);
-                        totalBodyRead += n;
-                    } else if (n == 0) {
-                        break;
-                    } else {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                            this_thread::sleep_for(chrono::milliseconds(5));
-                            continue;
-                        } else {
-                            isError = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (!isError) {
-                future<string> response_future = controller->handleRequestAsync(data,mac);
-                string response = response_future.get();
-                delete data;
-                send(new_socket, response.c_str(), response.size(), 0);
-                close(new_socket);
+                char clientIP[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
+                mac = getMAC(clientIP);
+                cout << clientIP << " vua thuc hien ket noi.\nMAC : " << mac << endl;
+                fcntl(clientFd,F_SETFL, O_NONBLOCK);
+                struct epoll_event clienEvent;
+                clienEvent.events = EPOLLIN;
+                clienEvent.data.fd = clientFd;
+                epoll_ctl(epfd, EPOLL_CTL_ADD, clientFd, &clienEvent);
             } else {
-                delete data;
-                string response = Response<string>().build(400, "Alo ALo", new string());
-                send(new_socket, response.c_str(), response.size(), 0);
-                close(new_socket);
+                threadPool.enqueue(checkRequest, clientFd, mac);
             }
-        }));
+        }
     }
 }
 
-void stopServer() {
-    if (serverStatus != -1) {
-        deletePointer();
-        shutdown(serverStatus, SHUT_RDWR);
-        close(serverStatus);
-        serverStatus = -1;
-    }
-}
 
 void restartServer(const string &className) {
     stopServer();
-    while (serverStatus != -1) { sleep(0.5); }
+    while (serverFd != -1) { sleep(0.5); }
     startServer(className);
 }
+
 
 int main() {
     while (true) {
@@ -249,14 +243,15 @@ int main() {
             } else {
                 classNames = "";
             }
-            if (serverStatus == -1) {
-                cout << "Khoi dong server\n";
+            if (serverFd == -1) {
+                cout << "Dang khoi dong server\n";
                 ServerThread = async(launch::async, startServer, classNames);
+                sleep(3);
             } else {
                 cout << "Server dang chay roi\n";
             }
         } else if (command == "stop") {
-            if (serverStatus != -1) {
+            if (serverFd != -1) {
                 cout << "Dung server\n";
                 stopServer();
             } else {

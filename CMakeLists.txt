@@ -32,5 +32,7 @@ add_executable(LTHTM #../Server.cpp
         Model/Cache.h
         Services/CacheService.cpp
         Services/CacheService.h
+        ThreadPool.cpp
+        ThreadPool.h
 )
 target_link_libraries(LTHTM PRIVATE /usr/lib/x86_64-linux-gnu/libmysqlcppconn.so)

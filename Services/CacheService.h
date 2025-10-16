@@ -17,8 +17,8 @@ class CacheService {
     Cache& cache;
     CacheService(CheckInService& checkInServices) :cache(Cache::getInstance()), checkInService(checkInServices) {}
     void loadCache(const string& className);
-    future<struct DiemDanh> checkSinhVien (const string& maSv, const string& macAdress);
-    future<struct DiemDanh> checkSinhVien (const string& macAdress);
+    struct DiemDanh checkSinhVien (const string& maSv, const string& macAdress);
+    struct DiemDanh checkSinhVien (const string& macAdress);
     void updateSinhVien(const string& maSv, const string& macAdress);
 private:
     CheckInService& checkInService;
