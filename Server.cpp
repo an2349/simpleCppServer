@@ -76,6 +76,7 @@ void checkRequest(int &fd, string mac) {
             close(fd);
             return;
         }
+        header = header.substr(0, endHead + 4);
         headerParsed = true;
     }
     size_t clPos = header.find("Content-Length:");
