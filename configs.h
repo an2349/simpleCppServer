@@ -7,7 +7,10 @@
 #pragma once
 
 #define PORT 8080
-#define MAX_CONTENT_LENGTH   ((1024 * 1024 *2)+1024)
+#define MAX_CONTENT_LENGTH   ((1024 * 1024 * 2)+1024)
+#define MAX_HEADER_LENGTH  (16 * 1024)
+#define MAX_EVENT 1000
+#define MAX_THREADS 2
 
 #define MAX_CONN 70
 #define DB_HOST ""
