@@ -53,36 +53,42 @@ string getMAC(const string &ip) {
     return "";
 }
 
-void checkRequest(int &fd, string mac) {
+void checkRequest(int &fd, string mac, const int &epfd) {
     char buf[MAX_HEADER_LENGTH];
+    vector<char> *req = new vector<char>();
+    vector<char> head;
     int contentLength = 0;
     string header;
     bool headerParsed = false;
     while (!headerParsed) {
-        ssize_t n = read(fd, buf, MAX_HEADER_LENGTH);
+        ssize_t n = read(fd, buf, 256);
         if (n <= 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 this_thread::sleep_for(chrono::milliseconds(5));
                 continue;
             } else {
-                //ke tao
+                epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+                close(fd);
+                return;
             }
         }
-        header.append(buf, n);
-        size_t endHead = header.find("\r\n\r\n");
+        req->insert(req->end(), buf, buf + n);
+        header += buf;
+        size_t endHead= header.find("\r\n\r\n");
         if (endHead == string::npos) {
             string res = Response<string>().build(400, "Request khong hop le", new string());
             send(fd, res.c_str(), res.size(), 0);
+            epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
             close(fd);
             return;
         }
-        header = header.substr(0, endHead + 4);
+        head.insert(head.end(), buf, buf + endHead + 4);
         headerParsed = true;
     }
     size_t clPos = header.find("Content-Length:");
     if (clPos != string::npos) {
         clPos += strlen("Content-Length:");
-        while (clPos < header.size() && header[clPos] == ' ') clPos++;
+        while (clPos < head.size() && header[clPos] == ' ') clPos++;
         size_t endLine = header.find("\r\n", clPos);
         if (endLine == string::npos) endLine = header.size();
         string clStr = header.substr(clPos, endLine - clPos);
@@ -91,32 +97,43 @@ void checkRequest(int &fd, string mac) {
         } catch (...) {
             string res = Response<string>().build(400, "Request khong hop le", new string());
             send(fd, res.c_str(), res.size(), 0);
+            epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
             close(fd);
             return;
         }
     }
-    if (contentLength > MAX_CONTENT_LENGTH || contentLength <= 0) {
+    if (contentLength > MAX_CONTENT_LENGTH || contentLength < 0) {
         string res = Response<string>().build(400, "Kich thuoc khong hop le", new string());
         send(fd, res.c_str(), res.size(), 0);
+        epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
         close(fd);
         return;
     }
-    vector<char> *data = new vector<char>();
-    data->insert(data->begin(), header.begin(), header.end());
-    while ((int) data->size() < contentLength) {
-        char buffer[(256 * 1024)];
-        ssize_t n = read(fd, buffer, (256 * 1024));
-        if (n > 0) {
-            data->insert(data->end(), buffer, buffer + n);
-        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            this_thread::sleep_for(chrono::milliseconds(5));
-            continue;
-        } else {
-            break;
+    int readData = (int) (contentLength + (int)head.size());
+    while (req->size() < readData) {
+        ssize_t n = read(fd, buf, min(readData, (int) sizeof(buf)));
+        //cout<<n<<endl;
+        if (n <= 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                this_thread::sleep_for(chrono::milliseconds(5));
+                continue;
+            } else {
+                epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+                close(fd);
+                delete req;
+                return;
+            }
         }
+        req->insert(req->end(), buf, buf + n);
     }
-    auto response = controller->handleRequestAsync(data, mac);
-    delete data;
+    string response;
+    try {
+        response = controller->handleRequestAsync(req, mac);
+    } catch (...) {
+        response = Response<string>().build(400, "ok", new string());
+        cout << "loi o ctl\n";
+    }
+    delete req;
     send(fd, response.c_str(), response.size(), 0);
     close(fd);
     return;
@@ -190,27 +207,27 @@ void startServer(const string &className) {
     while (true) {
         int nfds = epoll_wait(epfd, event, MAX_EVENT, -1);
         for (int i = 0; i < nfds; i++) {
-            string mac;
+            //string mac = "";
             int clientFd = event[i].data.fd;
             if (clientFd == serverFd) {
                 sockaddr_in clientAddr{};
                 socklen_t clienLen = sizeof(clientAddr);
-                int clientFd = accept(serverFd, (struct sockaddr *) &clientAddr, (socklen_t *) &clienLen);
+                clientFd = accept(serverFd, (struct sockaddr *) &clientAddr, (socklen_t *) &clienLen);
                 if (clientFd == -1) {
                     close(clientFd);
                     break;
                 }
                 char clientIP[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
-                mac = getMAC(clientIP);
-                cout << clientIP << " vua thuc hien ket noi.\nMAC : " << mac << endl;
+                //mac = getMAC(clientIP);
+                // cout << clientIP << " vua thuc hien ket noi.\nMAC : " << mac << endl;
                 fcntl(clientFd,F_SETFL, O_NONBLOCK);
                 struct epoll_event clienEvent;
                 clienEvent.events = EPOLLIN;
                 clienEvent.data.fd = clientFd;
                 epoll_ctl(epfd, EPOLL_CTL_ADD, clientFd, &clienEvent);
             } else {
-                threadPool.enqueue(checkRequest, clientFd, mac);
+                threadPool.enqueue(checkRequest, clientFd, "", epfd);
             }
         }
     }
@@ -225,6 +242,7 @@ void restartServer(const string &className) {
 
 
 int main() {
+    startServer("");
     while (true) {
         string input;
         cout << "\rServer :";
