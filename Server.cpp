@@ -20,6 +20,7 @@ Controller *controller = nullptr;
 CheckInService *checkInService = nullptr;
 CacheService *cacheService = nullptr;
 FileUpLoadServices *fileUpLoadService = nullptr;
+ThreadPool* threadPool = nullptr;
 unordered_map<int, string> macMap;
 
 void deletePointer() {
@@ -150,6 +151,10 @@ void stopServer() {
     if (serverFd != -1) {
         deletePointer();
         shutdown(serverFd, SHUT_RDWR);
+        if (threadPool != nullptr) {
+            delete threadPool;
+            threadPool = nullptr;
+        }
         close(serverFd);
         serverFd = -1;
     }
@@ -210,7 +215,7 @@ void startServer(const string &className) {
         stopServer();
         return;
     }
-    ThreadPool threadPool(MAX_THREADS);
+    threadPool  = new ThreadPool(MAX_THREADS);
     while (true) {
         int nfds = epoll_wait(epfd, event, MAX_EVENT, -1);
         for (int i = 0; i < nfds; i++) {
