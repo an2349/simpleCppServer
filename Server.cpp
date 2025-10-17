@@ -20,6 +20,7 @@ Controller *controller = nullptr;
 CheckInService *checkInService = nullptr;
 CacheService *cacheService = nullptr;
 FileUpLoadServices *fileUpLoadService = nullptr;
+unordered_map<int, string> macMap;
 
 void deletePointer() {
     delete controller;
@@ -68,6 +69,7 @@ void checkRequest(int &fd, string mac, const int &epfd) {
                 continue;
             } else {
                 epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+                macMap.erase(fd);
                 close(fd);
                 return;
             }
@@ -79,6 +81,7 @@ void checkRequest(int &fd, string mac, const int &epfd) {
             string res = Response<string>().build(400, "Request khong hop le", new string());
             send(fd, res.c_str(), res.size(), 0);
             epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+            macMap.erase(fd);
             close(fd);
             return;
         }
@@ -98,6 +101,7 @@ void checkRequest(int &fd, string mac, const int &epfd) {
             string res = Response<string>().build(400, "Request khong hop le", new string());
             send(fd, res.c_str(), res.size(), 0);
             epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+            macMap.erase(fd);
             close(fd);
             return;
         }
@@ -106,6 +110,7 @@ void checkRequest(int &fd, string mac, const int &epfd) {
         string res = Response<string>().build(400, "Kich thuoc khong hop le", new string());
         send(fd, res.c_str(), res.size(), 0);
         epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+        macMap.erase(fd);
         close(fd);
         return;
     }
@@ -119,6 +124,7 @@ void checkRequest(int &fd, string mac, const int &epfd) {
                 continue;
             } else {
                 epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+                macMap.erase(fd);
                 close(fd);
                 delete req;
                 return;
@@ -135,6 +141,7 @@ void checkRequest(int &fd, string mac, const int &epfd) {
     }
     delete req;
     send(fd, response.c_str(), response.size(), 0);
+    macMap.erase(fd);
     close(fd);
     return;
 }
@@ -207,7 +214,6 @@ void startServer(const string &className) {
     while (true) {
         int nfds = epoll_wait(epfd, event, MAX_EVENT, -1);
         for (int i = 0; i < nfds; i++) {
-            //string mac = "";
             int clientFd = event[i].data.fd;
             if (clientFd == serverFd) {
                 sockaddr_in clientAddr{};
@@ -219,15 +225,16 @@ void startServer(const string &className) {
                 }
                 char clientIP[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
-                //mac = getMAC(clientIP);
-                // cout << clientIP << " vua thuc hien ket noi.\nMAC : " << mac << endl;
+                string mac = getMAC(clientIP);
+                macMap[clientFd] = mac;
+                cout << clientIP << " vua thuc hien ket noi.\nMAC : " << mac << endl;
                 fcntl(clientFd,F_SETFL, O_NONBLOCK);
                 struct epoll_event clienEvent;
                 clienEvent.events = EPOLLIN;
                 clienEvent.data.fd = clientFd;
                 epoll_ctl(epfd, EPOLL_CTL_ADD, clientFd, &clienEvent);
             } else {
-                threadPool.enqueue(checkRequest, clientFd, "", epfd);
+                threadPool.enqueue(checkRequest, clientFd, macMap[clientFd], epfd);
             }
         }
     }
