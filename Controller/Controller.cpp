@@ -8,6 +8,7 @@ using namespace std;
 
 string Controller::handleRequestAsync(vector<char> *request,const string& clientMAC) {
         string req(request->begin(), request->end());
+        cout<<"Request: "<<req<<endl;
         Response<string> response;
         try {
             size_t hEnd = req.find("\r\n\r\n");
@@ -16,7 +17,7 @@ string Controller::handleRequestAsync(vector<char> *request,const string& client
             }
             string method = GetMethod(req);
             methods checkedMethod = CheckMethod(method);
-            //cout<<method<<endl;
+            cout<<method<<endl;
             if (checkedMethod == methods::NOT) {
                 return response.build(400, "Phương thức khôgn hợp lệ", new string(""));
             }
@@ -74,9 +75,12 @@ string Controller::handleRequestAsync(vector<char> *request,const string& client
                     checkIn = checkInService.CheckInAsync("",clientMAC);
                 }
                 string result = futures.back().get();
-                if (checkIn.valid()) checkIn.get();
+                if (!clientMAC.empty()) {
+                    if (checkIn.valid()) checkIn.get();
+                }
                 return result;
-            } else {
+            }
+            else {
                 return response.build(400, "Yêu cầu không hợp lệ", new string(""));
             }
         } catch (exception &e) {

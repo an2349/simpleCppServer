@@ -21,7 +21,8 @@ CheckInService *checkInService = nullptr;
 CacheService *cacheService = nullptr;
 FileUpLoadServices *fileUpLoadService = nullptr;
 ThreadPool* threadPool = nullptr;
-unordered_map<int, string> macMap;
+unordered_map<int, string*> macMap;
+mutex macMapMutex;
 
 void deletePointer() {
     delete controller;
@@ -55,97 +56,100 @@ string getMAC(const string &ip) {
     return "";
 }
 
-void checkRequest(int &fd, string mac, const int &epfd) {
-    char buf[MAX_HEADER_LENGTH];
-    vector<char> *req = new vector<char>();
-    vector<char> head;
-    int contentLength = 0;
-    string header;
-    bool headerParsed = false;
-    while (!headerParsed) {
-        ssize_t n = read(fd, buf, 256);
-        if (n <= 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                this_thread::sleep_for(chrono::milliseconds(5));
-                continue;
-            } else {
-                epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-                macMap.erase(fd);
-                close(fd);
-                return;
+vector<char>* checkRequest(int fd, string *mac, const int &epfd) {
+    char* buf = new char[64];
+    vector<char>* req = new vector<char>();
+    string* header = new string();
+    size_t totalRead = 0;
+
+    while (true) {
+        ssize_t n = read(fd, buf, 64);
+        if (n > 0) {
+            req->insert(req->end(), buf, buf + n);
+            totalRead += n;
+            header->append(buf, n);
+
+            if (totalRead > MAX_CONTENT_LENGTH) {
+                string response = Response<string>().build(400, "Vuot qua do dai", new string());
+                send(fd, response.c_str(), response.size(), 0);
+                break;
+            }
+
+            size_t headerEnd = header->find("\r\n\r\n");
+            if (headerEnd != string::npos) {
+                if (header->find("Transfer-Encoding: chunked") != string::npos) {
+                    string response = Response<string>().build(400, "Chunked not supported", new string());
+                    send(fd, response.c_str(), response.size(), 0);
+                    break;
+                }
+
+                size_t clPos = header->find("Content-Length:");
+                size_t contentLength = 0;
+                if (clPos != string::npos) {
+                    clPos += strlen("Content-Length:");
+                    while (clPos < header->size() && (*header)[clPos] == ' ') clPos++;
+                    size_t endLine = header->find("\r\n", clPos);
+                    if (endLine == string::npos) endLine = header->size();
+                    try { contentLength = std::stoul(header->substr(clPos, endLine - clPos)); } catch (...) { contentLength = 0; }
+
+                    if (req->size() >= headerEnd + 4 + contentLength) break;
+                } else {
+                    epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+                    //delete req;
+                    delete[] buf;
+                    delete header;
+                    delete macMap[fd];
+                    macMap.erase(fd);
+                    close(fd);
+                    return nullptr;
+                }
             }
         }
-        req->insert(req->end(), buf, buf + n);
-        header += buf;
-        size_t endHead= header.find("\r\n\r\n");
-        if (endHead == string::npos) {
-            string res = Response<string>().build(400, "Request khong hop le", new string());
-            send(fd, res.c_str(), res.size(), 0);
+        else if (n == 0) {
+            break;
+        }
+        else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            this_thread::sleep_for(chrono::milliseconds(10));
+            // break;
+        }
+        else {
             epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+            //delete req;
+            delete[] buf;
+            delete header;
+            delete macMap[fd];
             macMap.erase(fd);
             close(fd);
-            return;
-        }
-        head.insert(head.end(), buf, buf + endHead + 4);
-        headerParsed = true;
-    }
-    size_t clPos = header.find("Content-Length:");
-    if (clPos != string::npos) {
-        clPos += strlen("Content-Length:");
-        while (clPos < head.size() && header[clPos] == ' ') clPos++;
-        size_t endLine = header.find("\r\n", clPos);
-        if (endLine == string::npos) endLine = header.size();
-        string clStr = header.substr(clPos, endLine - clPos);
-        try {
-            contentLength = stoul(clStr);
-        } catch (...) {
-            string res = Response<string>().build(400, "Request khong hop le", new string());
-            send(fd, res.c_str(), res.size(), 0);
-            epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-            macMap.erase(fd);
-            close(fd);
-            return;
+            return nullptr;
         }
     }
-    if (contentLength > MAX_CONTENT_LENGTH || contentLength < 0) {
-        string res = Response<string>().build(400, "Kich thuoc khong hop le", new string());
-        send(fd, res.c_str(), res.size(), 0);
-        epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-        macMap.erase(fd);
-        close(fd);
-        return;
-    }
-    int readData = (int) (contentLength + (int)head.size());
-    while (req->size() < readData) {
-        ssize_t n = read(fd, buf, min(readData, (int) sizeof(buf)));
-        //cout<<n<<endl;
-        if (n <= 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                this_thread::sleep_for(chrono::milliseconds(5));
-                continue;
-            } else {
-                epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-                macMap.erase(fd);
-                close(fd);
-                delete req;
-                return;
-            }
-        }
-        req->insert(req->end(), buf, buf + n);
-    }
-    string response;
-    try {
-        response = controller->handleRequestAsync(req, mac);
-    } catch (...) {
-        response = Response<string>().build(400, "ok", new string());
-        cout << "loi o ctl\n";
-    }
-    delete req;
-    send(fd, response.c_str(), response.size(), 0);
+    epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+    //delete req;
+    delete[] buf;
+    delete header;
+    delete macMap[fd];
     macMap.erase(fd);
     close(fd);
-    return;
+    return req;
 }
+    /*string response;
+    try {
+        response = controller->handleRequestAsync(req, *mac);
+    } catch (...) {
+        response = Response<string>().build(400, "loi o ctl", new string());
+    }
+
+    send(fd, response.c_str(), response.size(), 0);
+
+    delete req;
+    delete[] buf;
+    delete header;
+    //delete macMap[fd];
+    macMap.erase(fd);
+    epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+    close(fd);
+}*/
+
 
 void stopServer() {
     if (serverFd != -1) {
@@ -160,6 +164,14 @@ void stopServer() {
     }
 }
 
+
+void handle(vector<char>* req , const string& macID, const int& fd, const int& epfd) {
+    string response = controller->handleRequestAsync(req, macID);
+    send(fd, response.c_str(), response.size(), 0);
+    /*epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+    close(fd);*/
+    delete req;
+}
 
 void startServer(const string &className) {
     struct sockaddr_in address;
@@ -230,16 +242,25 @@ void startServer(const string &className) {
                 }
                 char clientIP[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
-                string mac = getMAC(clientIP);
+                string *mac =new string();
+                *mac = getMAC(clientIP);
+                lock_guard<std::mutex> lock(macMapMutex);
                 macMap[clientFd] = mac;
-                cout << clientIP << " vua thuc hien ket noi.\nMAC : " << mac << endl;
+                cout << clientIP << " vua thuc hien ket noi.\nMAC : " << *mac << endl;
                 fcntl(clientFd,F_SETFL, O_NONBLOCK);
                 struct epoll_event clienEvent;
                 clienEvent.events = EPOLLIN;
                 clienEvent.data.fd = clientFd;
                 epoll_ctl(epfd, EPOLL_CTL_ADD, clientFd, &clienEvent);
             } else {
-                threadPool.enqueue(checkRequest, clientFd, macMap[clientFd], epfd);
+                if (checkRequest(clientFd, macMap[clientFd], epfd) == nullptr) {
+                    string response = Response<string>().build(500, " khong hop le", new string());
+                    send(clientFd, response.c_str(), response.size(), 0);
+                    epoll_ctl(epfd, EPOLL_CTL_DEL, clientFd, NULL);
+                    close(clientFd);
+
+                }
+                threadPool->enqueue(handle, checkRequest(clientFd, macMap[clientFd], epfd), *macMap[clientFd], clientFd , epfd);
             }
         }
     }
