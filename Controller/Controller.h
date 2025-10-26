@@ -19,7 +19,7 @@ public:
     Controller(CheckInService& checkInServices, FileUpLoadServices& fileUpLoadServices)
     : checkInService(checkInServices), fileService(fileUpLoadServices){}
 
-    string handleRequestAsync(vector<char>* req,const string& clientMAC);
+    string handleRequestAsync(vector<char>* req,const string& clientMAC, const string& clientIp);
 
 private:
     CheckInService& checkInService;

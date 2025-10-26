@@ -21,8 +21,14 @@ CheckInService *checkInService = nullptr;
 CacheService *cacheService = nullptr;
 FileUpLoadServices *fileUpLoadService = nullptr;
 ThreadPool* threadPool = nullptr;
-unordered_map<int, string*> macMap;
-mutex macMapMutex;
+
+struct ClientInfo {
+    string ClientMac;
+    string ClientIp;
+};
+unordered_map<int, ClientInfo*> clientMap;
+mutex clientMapMutex;
+
 
 void deletePointer() {
     delete controller;
@@ -56,7 +62,7 @@ string getMAC(const string &ip) {
     return "";
 }
 
-vector<char>* checkRequest(int fd, string *mac, const int &epfd) {
+vector<char>* checkRequest(int fd,  const int &epfd) {
     char* buf = new char[64];
     vector<char>* req = new vector<char>();
     string* header = new string();
@@ -95,12 +101,8 @@ vector<char>* checkRequest(int fd, string *mac, const int &epfd) {
                     if (req->size() >= headerEnd + 4 + contentLength) break;
                 } else {
                     epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-                    //delete req;
                     delete[] buf;
                     delete header;
-                    delete macMap[fd];
-                    macMap.erase(fd);
-                    close(fd);
                     return nullptr;
                 }
             }
@@ -117,38 +119,15 @@ vector<char>* checkRequest(int fd, string *mac, const int &epfd) {
             //delete req;
             delete[] buf;
             delete header;
-            delete macMap[fd];
-            macMap.erase(fd);
-            close(fd);
             return nullptr;
         }
     }
     epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-    //delete req;
     delete[] buf;
     delete header;
-    delete macMap[fd];
-    macMap.erase(fd);
-    close(fd);
     return req;
 }
-    /*string response;
-    try {
-        response = controller->handleRequestAsync(req, *mac);
-    } catch (...) {
-        response = Response<string>().build(400, "loi o ctl", new string());
-    }
 
-    send(fd, response.c_str(), response.size(), 0);
-
-    delete req;
-    delete[] buf;
-    delete header;
-    //delete macMap[fd];
-    macMap.erase(fd);
-    epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-    close(fd);
-}*/
 
 
 void stopServer() {
@@ -165,11 +144,17 @@ void stopServer() {
 }
 
 
-void handle(vector<char>* req , const string& macID, const int& fd, const int& epfd) {
-    string response = controller->handleRequestAsync(req, macID);
-    send(fd, response.c_str(), response.size(), 0);
-    /*epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-    close(fd);*/
+void handle(vector<char>* req , struct ClientInfo* clientInfo, const int& fd, const int& epfd) {
+    string response = controller->handleRequestAsync(req, clientInfo->ClientMac, clientInfo->ClientIp);
+    try {
+        send(fd, response.c_str(), response.size(), 0);
+    }
+    catch (exception &e) {
+        cout << e.what();
+    }
+    delete clientMap[fd];
+     clientMap.erase(fd);
+    close(fd);
     delete req;
 }
 
@@ -240,28 +225,33 @@ void startServer(const string &className) {
                     close(clientFd);
                     break;
                 }
-                char clientIP[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
+                char* clientIP[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &clientAddr.sin_addr, *clientIP, INET_ADDRSTRLEN);
                 string *mac =new string();
-                *mac = getMAC(clientIP);
-                lock_guard<std::mutex> lock(macMapMutex);
-                macMap[clientFd] = mac;
-                cout << clientIP << " vua thuc hien ket noi.\nMAC : " << *mac << endl;
+                *mac = getMAC(*clientIP);
+                lock_guard<std::mutex> lock(clientMapMutex);
+                clientMap[clientFd]->ClientMac = *mac;
+                clientMap[clientFd]->ClientIp = *clientIP;
+                cout << *clientIP << " vua thuc hien ket noi.\nMAC : " << *mac << endl;
                 fcntl(clientFd,F_SETFL, O_NONBLOCK);
                 struct epoll_event clienEvent;
                 clienEvent.events = EPOLLIN;
                 clienEvent.data.fd = clientFd;
                 epoll_ctl(epfd, EPOLL_CTL_ADD, clientFd, &clienEvent);
             } else {
-                if (checkRequest(clientFd, macMap[clientFd], epfd) == nullptr) {
+                auto x = checkRequest(clientFd, epfd);
+                if ( x == nullptr) {
                     string response = Response<string>().build(500, " khong hop le", new string());
                     send(clientFd, response.c_str(), response.size(), 0);
                     epoll_ctl(epfd, EPOLL_CTL_DEL, clientFd, NULL);
                     close(clientFd);
-
+                    delete x;
+                    break;
                 }
-                threadPool->enqueue(handle, checkRequest(clientFd, macMap[clientFd], epfd), *macMap[clientFd], clientFd , epfd);
+                else{
+                threadPool->enqueue(handle,  x, clientMap[clientFd], clientFd , epfd);
             }
+        }
         }
     }
 }

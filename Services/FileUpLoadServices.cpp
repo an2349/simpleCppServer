@@ -8,11 +8,11 @@
 #include <iostream>
 
 
-future<string> FileUpLoadServices::UpLoadAsync(MultiPartModel *multipart, const string &boundary) {
-    return async(launch::async, [multipart, boundary,this]() {
+future<string> FileUpLoadServices::UpLoadAsync(MultiPartModel *multipart, const string &boundary, const string& clientIp, const string& clientId){
+    return async(launch::async, [multipart, boundary,this, clientIp, clientId]() {
         Response<MultiPartModel> response;
         try {
-            FileStatus fileStatus = SaveFileAsync(multipart, boundary);
+            FileStatus fileStatus = SaveFileAsync(multipart, boundary, clientIp, clientId);
             if (fileStatus.isUpload == true) {
                 if (fileStatus.isSave == false) {
                     return response.build(203, "Nhan ok", multipart);
@@ -27,7 +27,7 @@ future<string> FileUpLoadServices::UpLoadAsync(MultiPartModel *multipart, const 
     });
 }
 
-FileUpLoadServices::FileStatus FileUpLoadServices::SaveFileAsync(MultiPartModel *multipart, const string &boundary) {
+FileUpLoadServices::FileStatus FileUpLoadServices::SaveFileAsync(MultiPartModel *multipart, const string &boundary, const string& clientIp, const string& clientId) {
     FileStatus fileStatus = FileStatus();
     try {
         lock_guard<mutex> lock(mtx);
@@ -58,7 +58,7 @@ FileUpLoadServices::FileStatus FileUpLoadServices::SaveFileAsync(MultiPartModel 
         }
         if (allChunksPresent) {
             string timestamp = to_string(time(nullptr));
-            string finalFile = filePath + "/" + timestamp + "_" + multipart->name;
+            string finalFile = filePath + "/"  + (!clientId.empty() ? clientIp + "/": "" ) + (!clientIp.empty()?  clientIp + "/":"")  + timestamp + "_" + multipart->name;
             ofstream ofsFinal(finalFile, ios::binary);
             if (!ofsFinal.is_open()) {
                 std::cout << "loi ghep chunk";

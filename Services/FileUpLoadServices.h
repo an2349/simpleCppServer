@@ -30,9 +30,9 @@ public:
         }
     }
 
-    future<string> UpLoadAsync(MultiPartModel *multipart, const string &boundary);
+    future<string> UpLoadAsync(MultiPartModel *multipart, const string &boundary, const string& clientIp, const string& clientId);
 
-    FileStatus SaveFileAsync(MultiPartModel *multipart, const string &boundary);
+    FileStatus SaveFileAsync(MultiPartModel *multipart, const string &boundary, const string& clientIp, const string& clientId);
 };
 
 

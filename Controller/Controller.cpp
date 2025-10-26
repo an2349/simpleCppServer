@@ -6,9 +6,9 @@
 #include <regex>
 using namespace std;
 
-string Controller::handleRequestAsync(vector<char> *request,const string& clientMAC) {
+string Controller::handleRequestAsync(vector<char> *request,const string& clientMAC ,const string& clientIp) {
         string req(request->begin(), request->end());
-        cout<<"Request: "<<req<<endl;
+        //cout<<"Request: "<<req<<endl;
         Response<string> response;
         try {
             size_t hEnd = req.find("\r\n\r\n");
@@ -68,7 +68,7 @@ string Controller::handleRequestAsync(vector<char> *request,const string& client
                         }
                         return response.build(400, "khong hop le", new string(""));
                     }
-                    futures.push_back(fileService.UpLoadAsync(part, boundary));
+                    futures.push_back(fileService.UpLoadAsync(part, boundary, clientIp, ""));
                 }
                 future<string> checkIn ;
                 if (!clientMAC.empty()) {
