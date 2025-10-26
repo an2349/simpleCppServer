@@ -52,14 +52,22 @@ SinhVien SinhVienRepo::KiemTra(const shared_ptr<DBConnection>& conn, const strin
         return sinhVien;
     }
 }
-vector<struct DiemDanh> SinhVienRepo::GetAllSinhVien(const shared_ptr<DBConnection>& conn,const string& className) {
+
+
+
+vector<struct DiemDanh> SinhVienRepo::GetAllSinhVien(const shared_ptr<DBConnection>& conn, const vector<string>& className) {
     vector<struct DiemDanh> dsSinhVien;
     if (!conn || !conn->get()) return dsSinhVien;
     try {
+        string joinedClasses;
+        for (size_t i = 0; i < className.size(); ++i) {
+            joinedClasses += className[i];
+            if (i != className.size() - 1) joinedClasses += ",";
+        }
         unique_ptr<sql::PreparedStatement> sql(
             conn->get()->prepareStatement("CALL proc_get_cache(?);"));
 
-        sql->setString(1, className);
+        sql->setString(1, joinedClasses);
         unique_ptr<sql::ResultSet> res(sql->executeQuery());
 
         while (res->next()) {
@@ -75,6 +83,7 @@ vector<struct DiemDanh> SinhVienRepo::GetAllSinhVien(const shared_ptr<DBConnecti
         while (sql->getMoreResults()) {
             unique_ptr<sql::ResultSet> trash(sql->getResultSet());
         }
+
         return dsSinhVien;
     }
     catch (sql::SQLException& e) {

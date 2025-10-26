@@ -32,7 +32,7 @@ public:
     CheckInService(DBPool& dbPools) : dbPool(dbPools) {
     }
 
-    vector<struct DiemDanh> GetAllSinhVien(const string& className);
+    vector<struct DiemDanh> GetAllSinhVien(const vector<string>& className);
     future<string> CheckInAsync(const string& maSv, const string& macAdress);
 };
 

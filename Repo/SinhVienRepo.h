@@ -17,7 +17,7 @@ public:
     SinhVienRepo(){}
     bool DiemDanh(const shared_ptr<DBConnection>& conn, const string& maSv,const string& macAdress);
     SinhVien KiemTra(const shared_ptr<DBConnection>& conn,const string& querry);
-    vector<struct DiemDanh> GetAllSinhVien(const shared_ptr<DBConnection>& conn,const string& className);
+    vector<struct DiemDanh> GetAllSinhVien(const shared_ptr<DBConnection>& conn,const vector<string>& className);
 };
 
 

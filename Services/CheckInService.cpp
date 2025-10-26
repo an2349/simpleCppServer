@@ -55,7 +55,7 @@ bool CheckInService::CheckInSinhVien(shared_ptr<DBConnection> &conn, const strin
     return repo.DiemDanh(conn, maSv, macAdress);
 }
 
-vector<struct DiemDanh> CheckInService::GetAllSinhVien(const string &className) {
+vector<struct DiemDanh> CheckInService::GetAllSinhVien(const vector<string> &className) {
     vector<struct DiemDanh> *dsSinhVien = new vector<struct DiemDanh>();
     auto conn = dbPool.getConn();
     if (!conn || !conn->get()) { return *dsSinhVien; }

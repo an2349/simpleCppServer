@@ -3,7 +3,7 @@
 //
 
 #include "CacheService.h"
-void CacheService::loadCache(const string& className) {
+void CacheService::loadCache(const vector<string>& className) {
     auto allSV = checkInService.GetAllSinhVien(className);
     unique_lock lock(cache.cacheMutex);
     for (const auto& sv : allSV) {

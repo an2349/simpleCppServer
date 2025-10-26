@@ -10,11 +10,15 @@
 #include "Services/FileUpLoadServices.h"
 #include <sys/epoll.h>
 #include "ThreadPool.h"
+#include <sys/eventfd.h>
+#include <cstring>
 
 using namespace std;
 
-future<void> ServerThread;
+thread ServerThread;
 int serverFd = -1;
+int epfd = -1;
+int notifyFd = -1;
 DBPool *dbPool = nullptr;
 Controller *controller = nullptr;
 CheckInService *checkInService = nullptr;
@@ -25,9 +29,17 @@ ThreadPool* threadPool = nullptr;
 struct ClientInfo {
     string ClientMac;
     string ClientIp;
+    time_t lastActive;
+    int requestCount = 0;
 };
 unordered_map<int, ClientInfo*> clientMap;
 mutex clientMapMutex;
+
+
+struct HttpRequest {
+    vector<char>* req;
+    bool keepAlive;
+};
 
 
 void deletePointer() {
@@ -62,14 +74,17 @@ string getMAC(const string &ip) {
     return "";
 }
 
-vector<char>* checkRequest(int fd,  const int &epfd) {
+struct HttpRequest* checkRequest(int fd,  const int &epfd) {
     char* buf = new char[64];
     vector<char>* req = new vector<char>();
     string* header = new string();
     size_t totalRead = 0;
-
+    bool keepAlive = false;
     while (true) {
         ssize_t n = read(fd, buf, 64);
+        clientMapMutex.lock();
+        if (clientMap.count(fd)) clientMap[fd]->lastActive = time(nullptr);
+        clientMapMutex.unlock();
         if (n > 0) {
             req->insert(req->end(), buf, buf + n);
             totalRead += n;
@@ -87,6 +102,12 @@ vector<char>* checkRequest(int fd,  const int &epfd) {
                     string response = Response<string>().build(400, "Chunked not supported", new string());
                     send(fd, response.c_str(), response.size(), 0);
                     break;
+                }
+
+                if (header->find("Connection: keep-alive") != string::npos ||
+                    (header->find("HTTP/1.1") != string::npos &&
+                     header->find("Connection: close") == string::npos)) {
+                    keepAlive = true;
                 }
 
                 size_t clPos = header->find("Content-Length:");
@@ -112,11 +133,9 @@ vector<char>* checkRequest(int fd,  const int &epfd) {
         }
         else if (errno == EAGAIN || errno == EWOULDBLOCK) {
             this_thread::sleep_for(chrono::milliseconds(10));
-            // break;
         }
         else {
             epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-            //delete req;
             delete[] buf;
             delete header;
             return nullptr;
@@ -125,13 +144,20 @@ vector<char>* checkRequest(int fd,  const int &epfd) {
     epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
     delete[] buf;
     delete header;
-    return req;
+    auto* result = new HttpRequest();
+    result->req = req;
+    result->keepAlive = keepAlive;
+    return result;
 }
-
 
 
 void stopServer() {
     if (serverFd != -1) {
+        if (notifyFd != -1) {
+            uint64_t u = 1;
+            write(notifyFd, &u, sizeof(u));
+        }
+
         deletePointer();
         shutdown(serverFd, SHUT_RDWR);
         if (threadPool != nullptr) {
@@ -141,24 +167,46 @@ void stopServer() {
         close(serverFd);
         serverFd = -1;
     }
+
+    if (epfd != -1) {
+        close(epfd);
+        epfd = -1;
+    }
+    if (notifyFd != -1) {
+        close(notifyFd);
+        notifyFd = -1;
+    }
 }
 
 
-void handle(vector<char>* req , struct ClientInfo* clientInfo, const int& fd, const int& epfd) {
-    string response = controller->handleRequestAsync(req, clientInfo->ClientMac, clientInfo->ClientIp);
-    try {
-        send(fd, response.c_str(), response.size(), 0);
+
+void handle(HttpRequest* request, ClientInfo* clientInfo, const int& fd, const int& epfd) {
+    string response = controller->handleRequestAsync(request->req, clientInfo->ClientMac, clientInfo->ClientIp);
+    send(fd, response.c_str(), response.size(), 0);
+
+    if (!request->keepAlive) {
+        {
+            lock_guard<mutex> lg(clientMapMutex);
+            auto it = clientMap.find(fd);
+            if (it != clientMap.end()) {
+                delete it->second;
+                clientMap.erase(it);
+            }
+        }
+        close(fd);
+    } else {
+        clientInfo->requestCount++;
+        struct epoll_event ev{};
+        ev.events = EPOLLIN;
+        ev.data.fd = fd;
+        epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev);
     }
-    catch (exception &e) {
-        cout << e.what();
-    }
-    delete clientMap[fd];
-     clientMap.erase(fd);
-    close(fd);
-    delete req;
+
+    delete request->req;
+    delete request;
 }
 
-void startServer(const string &className) {
+void startServer(const vector<string> &className) {
     struct sockaddr_in address;
     int turn = 1;
     int addrlen = sizeof(address);
@@ -167,10 +215,15 @@ void startServer(const string &className) {
         cerr << " loi o socket\n";
         return;
     }
-    if (setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &turn, sizeof(turn))) {
-        cerr << " loi o socket \n";
-        return;
+    int opt = 1;
+    if (setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        cerr << "setsockopt SO_REUSEADDR failed\n";
     }
+#ifdef SO_REUSEPORT
+    if (setsockopt(serverFd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
+        cerr << "setsockopt SO_REUSEPORT failed\n";
+    }
+#endif
 
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
@@ -185,9 +238,27 @@ void startServer(const string &className) {
         cerr << " loi lang nghe\n";
         return;
     }
-    int epfd = epoll_create1(0);
+    epfd = epoll_create1(0);
+    if (epfd == -1) {
+        cerr << "epoll_create1 failed\n";
+        return;
+    }
+
+    notifyFd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (notifyFd == -1) {
+        cerr << "eventfd failed\n";
+        close(epfd);
+        epfd = -1;
+        return;
+    }
+
     struct epoll_event ev{};
     struct epoll_event event[MAX_EVENT];
+
+    ev.events = EPOLLIN;
+    ev.data.fd = notifyFd;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, notifyFd, &ev);
+
     ev.events = EPOLLIN;
     ev.data.fd = serverFd;
     epoll_ctl(epfd, EPOLL_CTL_ADD, serverFd, &ev);
@@ -198,7 +269,7 @@ void startServer(const string &className) {
         controller = new Controller(*checkInService, *fileUpLoadService);
         cacheService = new CacheService(*checkInService);
         cacheService->loadCache(className);
-        cout << "\r\nDanh sach sinh vien trong lop " << className << " : \n";
+        //cout << "\r\nDanh sach sinh vien trong lop " << className << " : \n";
         for (const auto &[maSv, dd]: Cache::danhSachSV) {
             cout << "Ma so: " << maSv
                     << ", Ten: " << dd.FullName
@@ -213,31 +284,58 @@ void startServer(const string &className) {
         return;
     }
     threadPool  = new ThreadPool(MAX_THREADS);
-    while (true) {
+    while (serverFd != -1) {
         int nfds = epoll_wait(epfd, event, MAX_EVENT, -1);
+        if (nfds == -1) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        static time_t lastCheck = 0;
+        time_t now = time(nullptr);
+        if (now - lastCheck >= 5) {
+            lastCheck = now;
+            lock_guard<mutex> lock(clientMapMutex);
+            for (auto it = clientMap.begin(); it != clientMap.end();) {
+                if (now - it->second->lastActive > 5) {
+                    close(it->first);
+                    delete it->second;
+                    it = clientMap.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
         for (int i = 0; i < nfds; i++) {
             int clientFd = event[i].data.fd;
+            if (clientFd == notifyFd) {
+                uint64_t val;
+                read(notifyFd, &val, sizeof(val));
+                serverFd = -1;
+                break;
+            }
             if (clientFd == serverFd) {
                 sockaddr_in clientAddr{};
                 socklen_t clienLen = sizeof(clientAddr);
-                clientFd = accept(serverFd, (struct sockaddr *) &clientAddr, (socklen_t *) &clienLen);
-                if (clientFd == -1) {
-                    close(clientFd);
-                    break;
+                int newFd = accept(serverFd, (struct sockaddr *) &clientAddr, (socklen_t *) &clienLen);
+                if (newFd == -1) {
+                    continue;
                 }
-                char* clientIP[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &clientAddr.sin_addr, *clientIP, INET_ADDRSTRLEN);
-                string *mac =new string();
-                *mac = getMAC(*clientIP);
+                char clientIP[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
+                string mac = getMAC(clientIP);
+                auto* info = new ClientInfo();
+                info->ClientMac = mac;
+                info->ClientIp = clientIP;
+                info->lastActive = time(nullptr);
                 lock_guard<std::mutex> lock(clientMapMutex);
-                clientMap[clientFd]->ClientMac = *mac;
-                clientMap[clientFd]->ClientIp = *clientIP;
-                cout << *clientIP << " vua thuc hien ket noi.\nMAC : " << *mac << endl;
-                fcntl(clientFd,F_SETFL, O_NONBLOCK);
+                clientMap[newFd] = info;
+                cout << clientIP << " vua thuc hien ket noi.\nMAC : " << mac << endl;
+                fcntl(newFd,F_SETFL, O_NONBLOCK);
                 struct epoll_event clienEvent;
                 clienEvent.events = EPOLLIN;
-                clienEvent.data.fd = clientFd;
-                epoll_ctl(epfd, EPOLL_CTL_ADD, clientFd, &clienEvent);
+                clienEvent.data.fd = newFd;
+                epoll_ctl(epfd, EPOLL_CTL_ADD, newFd, &clienEvent);
             } else {
                 auto x = checkRequest(clientFd, epfd);
                 if ( x == nullptr) {
@@ -249,15 +347,47 @@ void startServer(const string &className) {
                     break;
                 }
                 else{
-                threadPool->enqueue(handle,  x, clientMap[clientFd], clientFd , epfd);
+                    ClientInfo* ci = nullptr;
+                    {
+                        lock_guard<mutex> lg(clientMapMutex);
+                        auto it = clientMap.find(clientFd);
+                        if (it != clientMap.end()) ci = it->second;
+                    }
+                    if (ci == nullptr) {
+                        string response = Response<string>().build(500, " khong hop le", new string());
+                        send(clientFd, response.c_str(), response.size(), 0);
+                        epoll_ctl(epfd, EPOLL_CTL_DEL, clientFd, NULL);
+                        close(clientFd);
+                        delete x;
+                        continue;
+                    }
+                    threadPool->enqueue(handle,  x, ci, clientFd , epfd);
+                }
             }
         }
+        if (serverFd == -1) break;
+    }
+
+    {
+        lock_guard<mutex> lock(clientMapMutex);
+        for (auto &p : clientMap) {
+            close(p.first);
+            delete p.second;
         }
+        clientMap.clear();
+    }
+    if (epfd != -1) {
+        close(epfd);
+        epfd = -1;
+    }
+    if (notifyFd != -1) {
+        close(notifyFd);
+        notifyFd = -1;
     }
 }
 
 
-void restartServer(const string &className) {
+void restartServer(const vector<string> &className) {
     stopServer();
     while (serverFd != -1) { sleep(0.5); }
     startServer(className);
@@ -265,7 +395,7 @@ void restartServer(const string &className) {
 
 
 int main() {
-    startServer("");
+    //startServer("");
     while (true) {
         string input;
         cout << "\rServer :";
@@ -277,39 +407,55 @@ int main() {
 
         if (command == "start") {
             string option;
-            string classNames;
-
+            vector<string> classNames;
             iss >> option;
+
             if (option == "-c") {
-                iss >> classNames;
-            } else {
-                classNames = "";
+                string list;
+                getline(iss, list);
+                stringstream ss(list);
+                string cls;
+                while (getline(ss, cls, ',')) {
+                    cls.erase(remove_if(cls.begin(), cls.end(), ::isspace), cls.end());
+                    if (!cls.empty()) classNames.push_back(cls);
+                }
             }
+
             if (serverFd == -1) {
                 cout << "Dang khoi dong server\n";
-                ServerThread = async(launch::async, startServer, classNames);
+                ServerThread = thread(startServer, classNames);//(launch::async, startServer, classNames);
                 sleep(3);
             } else {
                 cout << "Server dang chay roi\n";
             }
+
         } else if (command == "stop") {
             if (serverFd != -1) {
                 cout << "Dung server\n";
                 stopServer();
+                if (ServerThread.joinable()) ServerThread.join();
             } else {
                 cout << "Server dang khong hoat dong\n";
             }
-        } else if (command == "restart") {
+        }else if (command == "restart") {
             string option;
-            string classNames;
-
+            vector<string> classNames;
             iss >> option;
-            if (option == "-c") {
-                iss >> classNames;
-            } else {
-                classNames = "";
-            }
 
+            if (option == "-c") {
+                string list;
+                getline(iss, list);
+                stringstream ss(list);
+                string cls;
+                while (getline(ss, cls, ',')) {
+                    cls.erase(remove_if(cls.begin(), cls.end(), ::isspace), cls.end());
+                    if (!cls.empty())
+                        classNames.push_back(cls);
+                }
+            } else {
+                if (!option.empty())
+                    classNames.push_back(option);
+            }
             cout << "Dang khoi dong lai server" << flush;
             sleep(1.7);
             cout << "." << flush;
