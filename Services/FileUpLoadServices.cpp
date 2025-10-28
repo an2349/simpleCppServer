@@ -57,11 +57,24 @@ FileUpLoadServices::FileStatus FileUpLoadServices::SaveFileAsync(MultiPartModel 
             }
         }
         if (allChunksPresent) {
+            filesystem::path dirPath = filePath;
             string timestamp = to_string(time(nullptr));
-            string finalFile = filePath + "/"  + (!clientId.empty() ? clientIp + "/": "" ) + (!clientIp.empty()?  clientIp + "/":"")  + timestamp + "_" + multipart->name;
+            if (!clientId.empty()) {
+                dirPath /= clientId;
+                if (!clientIp.empty()) {
+                    dirPath /= clientIp;}
+            } else if (!clientIp.empty()) {
+                dirPath /= clientIp;
+            }
+            if (!filesystem::exists(dirPath)) {
+                filesystem::create_directories(dirPath);
+            }
+            string finalName = timestamp + "_" + multipart->name;
+            filesystem::path finalPath = dirPath / finalName;
+            string finalFile = finalPath.string();
             ofstream ofsFinal(finalFile, ios::binary);
             if (!ofsFinal.is_open()) {
-                std::cout << "loi ghep chunk";
+                cout << "loi ghep chunk";
                 return fileStatus;
             }
 
