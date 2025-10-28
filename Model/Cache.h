@@ -15,6 +15,7 @@ struct DiemDanh {
     string Mac = "";
     string FullName = "";
     string ClassName = "";
+    /*mutable  mutex mtx;*/
 };
 class Cache {
 public:
@@ -23,6 +24,7 @@ public:
         static Cache instance;
         return instance;
     }
+   static unordered_map<string, std::mutex> svLocks;
     static unordered_map<string, DiemDanh> danhSachSV;
     static shared_mutex cacheMutex;
 };

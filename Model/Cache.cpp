@@ -4,4 +4,5 @@
 
 #include "Cache.h"
 unordered_map<string, DiemDanh> Cache::danhSachSV;
+unordered_map<string, std::mutex> Cache::svLocks;
 shared_mutex Cache::cacheMutex;

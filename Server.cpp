@@ -24,7 +24,7 @@ Controller *controller = nullptr;
 CheckInService *checkInService = nullptr;
 CacheService *cacheService = nullptr;
 FileUpLoadServices *fileUpLoadService = nullptr;
-ThreadPool* threadPool = nullptr;
+ThreadPool *threadPool = nullptr;
 
 struct ClientInfo {
     string ClientMac;
@@ -32,12 +32,13 @@ struct ClientInfo {
     time_t lastActive;
     int requestCount = 0;
 };
-unordered_map<int, ClientInfo*> clientMap;
+
+unordered_map<int, ClientInfo *> clientMap;
 mutex clientMapMutex;
 
 
 struct HttpRequest {
-    vector<char>* req;
+    vector<char> *req;
     bool keepAlive;
 };
 
@@ -74,10 +75,10 @@ string getMAC(const string &ip) {
     return "";
 }
 
-struct HttpRequest* checkRequest(int fd,  const int &epfd) {
-    char* buf = new char[64];
-    vector<char>* req = new vector<char>();
-    string* header = new string();
+struct HttpRequest *checkRequest(int fd, const int &epfd) {
+    char *buf = new char[64];
+    vector<char> *req = new vector<char>();
+    string *header = new string();
     size_t totalRead = 0;
     bool keepAlive = false;
     while (true) {
@@ -117,7 +118,9 @@ struct HttpRequest* checkRequest(int fd,  const int &epfd) {
                     while (clPos < header->size() && (*header)[clPos] == ' ') clPos++;
                     size_t endLine = header->find("\r\n", clPos);
                     if (endLine == string::npos) endLine = header->size();
-                    try { contentLength = std::stoul(header->substr(clPos, endLine - clPos)); } catch (...) { contentLength = 0; }
+                    try { contentLength = std::stoul(header->substr(clPos, endLine - clPos)); } catch (...) {
+                        contentLength = 0;
+                    }
 
                     if (req->size() >= headerEnd + 4 + contentLength) break;
                 } else {
@@ -127,14 +130,11 @@ struct HttpRequest* checkRequest(int fd,  const int &epfd) {
                     return nullptr;
                 }
             }
-        }
-        else if (n == 0) {
+        } else if (n == 0) {
             break;
-        }
-        else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
             this_thread::sleep_for(chrono::milliseconds(10));
-        }
-        else {
+        } else {
             epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
             delete[] buf;
             delete header;
@@ -144,7 +144,7 @@ struct HttpRequest* checkRequest(int fd,  const int &epfd) {
     epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
     delete[] buf;
     delete header;
-    auto* result = new HttpRequest();
+    auto *result = new HttpRequest();
     result->req = req;
     result->keepAlive = keepAlive;
     return result;
@@ -179,8 +179,7 @@ void stopServer() {
 }
 
 
-
-void handle(HttpRequest* request, ClientInfo* clientInfo, const int& fd, const int& epfd) {
+void handle(HttpRequest *request, ClientInfo *clientInfo, const int &fd, const int &epfd) {
     string response = controller->handleRequestAsync(request->req, clientInfo->ClientMac, clientInfo->ClientIp);
     send(fd, response.c_str(), response.size(), 0);
 
@@ -274,8 +273,8 @@ void startServer(const vector<string> &className) {
             cout << "Ma so: " << maSv
                     << ", Ten: " << dd.FullName
                     << ", Lop: " << dd.ClassName
-                    << ", Diem danh: " << dd.IsCheckIn
                     << ", MAC: " << dd.Mac
+                    << ", Diem danh: " << dd.IsCheckIn
                     << endl;
         }
         checkInService->setCacheService(*cacheService);
@@ -283,7 +282,7 @@ void startServer(const vector<string> &className) {
         stopServer();
         return;
     }
-    threadPool  = new ThreadPool(MAX_THREADS);
+    threadPool = new ThreadPool(MAX_THREADS);
     while (serverFd != -1) {
         int nfds = epoll_wait(epfd, event, MAX_EVENT, -1);
         if (nfds == -1) {
@@ -324,7 +323,7 @@ void startServer(const vector<string> &className) {
                 char clientIP[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
                 string mac = getMAC(clientIP);
-                auto* info = new ClientInfo();
+                auto *info = new ClientInfo();
                 info->ClientMac = mac;
                 info->ClientIp = clientIP;
                 info->lastActive = time(nullptr);
@@ -338,16 +337,15 @@ void startServer(const vector<string> &className) {
                 epoll_ctl(epfd, EPOLL_CTL_ADD, newFd, &clienEvent);
             } else {
                 auto x = checkRequest(clientFd, epfd);
-                if ( x == nullptr) {
+                if (x == nullptr) {
                     string response = Response<string>().build(500, " khong hop le", new string());
                     send(clientFd, response.c_str(), response.size(), 0);
                     epoll_ctl(epfd, EPOLL_CTL_DEL, clientFd, NULL);
                     close(clientFd);
                     delete x;
                     break;
-                }
-                else{
-                    ClientInfo* ci = nullptr;
+                } else {
+                    ClientInfo *ci = nullptr;
                     {
                         lock_guard<mutex> lg(clientMapMutex);
                         auto it = clientMap.find(clientFd);
@@ -361,7 +359,7 @@ void startServer(const vector<string> &className) {
                         delete x;
                         continue;
                     }
-                    threadPool->enqueue(handle,  x, ci, clientFd , epfd);
+                    threadPool->enqueue(handle, x, ci, clientFd, epfd);
                 }
             }
         }
@@ -370,7 +368,7 @@ void startServer(const vector<string> &className) {
 
     {
         lock_guard<mutex> lock(clientMapMutex);
-        for (auto &p : clientMap) {
+        for (auto &p: clientMap) {
             close(p.first);
             delete p.second;
         }
@@ -423,12 +421,11 @@ int main() {
 
             if (serverFd == -1) {
                 cout << "Dang khoi dong server\n";
-                ServerThread = thread(startServer, classNames);//(launch::async, startServer, classNames);
+                ServerThread = thread(startServer, classNames); //(launch::async, startServer, classNames);
                 sleep(3);
             } else {
                 cout << "Server dang chay roi\n";
             }
-
         } else if (command == "stop") {
             if (serverFd != -1) {
                 cout << "Dung server\n";
@@ -437,7 +434,7 @@ int main() {
             } else {
                 cout << "Server dang khong hoat dong\n";
             }
-        }else if (command == "restart") {
+        } else if (command == "restart") {
             string option;
             vector<string> classNames;
             iss >> option;
@@ -466,10 +463,32 @@ int main() {
             sleep(2);
             restartServer(classNames);
             cout << "\rKhoi dong lai thanh cong!\n";
+        } else if (command == "check") {
+            if (serverFd == -1) {
+                cout << "Server chưa chạy\n";
+                continue;
+            }
+            for (const auto &[maSv, dd]: Cache::danhSachSV) {
+                cout << "Ma so: " << maSv
+                        << ", Ten: " << dd.FullName
+                        << ", Lop: " << dd.ClassName
+                        << ", MAC: " << dd.Mac
+                        << ", Diem danh: " << dd.IsCheckIn
+                        << endl;
+            }
         } else if (command == "thoat") {
             stopServer();
             cout << "Bye\n";
             return 0;
+        } else if (command == "help") {
+            cout << "Danh sách lệnh:\n";
+            cout << "   start                                      : Khởi động máy chủ\n";
+            cout << "  stop                                       : Dừng máy chủ\n";
+            cout << "  restart                                    : Khởi động lại máy chủ\n";
+            cout << " check                                      : Xem thông tin điểm danh" << endl;
+            cout << "  thoat                                      : Thoát khỏi máy chủ\n";
+            cout << "  help                                       : Thông tin lệnh\n";
+            cout << " -c   <lớp1,lớp2,...>                  : danh sách lớp { start -c ..., restart -c ... }\n";
         } else {
             cout << "Khong hop le\n";
         }
