@@ -76,13 +76,13 @@ string getMAC(const string &ip) {
 }
 
 struct HttpRequest *checkRequest(int fd, const int &epfd) {
-    char *buf = new char[64];
+    char *buf = new char[MAX_HEADER_LENGTH];
     vector<char> *req = new vector<char>();
     string *header = new string();
     size_t totalRead = 0;
     bool keepAlive = false;
     while (true) {
-        ssize_t n = read(fd, buf, 64);
+        ssize_t n = read(fd, buf, MAX_HEADER_LENGTH);
         clientMapMutex.lock();
         if (clientMap.count(fd)) clientMap[fd]->lastActive = time(nullptr);
         clientMapMutex.unlock();
