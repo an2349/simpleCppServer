@@ -106,8 +106,7 @@ struct HttpRequest *checkRequest(int fd, const int &epfd) {
                 }
 
                 if (header->find("Connection: keep-alive") != string::npos ||
-                    (header->find("HTTP/1.1") != string::npos &&
-                     header->find("Connection: close") == string::npos)) {
+                     header->find("Connection: close") == string::npos) {
                     keepAlive = true;
                 }
 
