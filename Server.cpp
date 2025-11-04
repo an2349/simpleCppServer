@@ -89,6 +89,7 @@ struct HttpRequest *checkRequest(int fd, const int &epfd) {
         if (n > 0) {
             req->insert(req->end(), buf, buf + n);
             totalRead += n;
+            cout<<buf<<endl;
             header->append(buf, n);
 
             if (totalRead > MAX_CONTENT_LENGTH) {
@@ -335,7 +336,8 @@ void startServer(const vector<string> &className) {
                 clienEvent.data.fd = newFd;
                 epoll_ctl(epfd, EPOLL_CTL_ADD, newFd, &clienEvent);
             } else {
-                auto x = checkRequest(clientFd, epfd);
+                try {
+                    auto x = checkRequest(clientFd, epfd);
                 if (x == nullptr) {
                     string response = Response<string>().build(500, " khong hop le", new string());
                     send(clientFd, response.c_str(), response.size(), 0);
@@ -359,6 +361,11 @@ void startServer(const vector<string> &className) {
                         continue;
                     }
                     threadPool->enqueue(handle, x, ci, clientFd, epfd);
+                }
+                }
+                catch (exception &e) {
+                    cout<<e.what()<<endl;
+                    return;
                 }
             }
         }
@@ -390,12 +397,9 @@ void restartServer(const vector<string> &className) {
     startServer(className);
 }
 
-
-int main() {
-    //startServer("");
-    while (true) {
+int handleCommand() {
+    /*while (true) {*/
         string input;
-        cout << "\rServer :";
         getline(cin, input);
 
         istringstream iss(input);
@@ -465,7 +469,7 @@ int main() {
         } else if (command == "check") {
             if (serverFd == -1) {
                 cout << "Server chưa chạy\n";
-                continue;
+                //continue;
             }
             for (const auto &[maSv, dd]: Cache::danhSachSV) {
                 cout << "Ma so: " << maSv
@@ -477,8 +481,7 @@ int main() {
             }
         } else if (command == "thoat") {
             stopServer();
-            cout << "Bye\n";
-            return 0;
+            return -1;
         } else if (command == "help") {
             cout << "Danh sách lệnh:\n";
             cout << "   start                                      : Khởi động máy chủ\n";
@@ -491,6 +494,22 @@ int main() {
         } else {
             cout << "Khong hop le\n";
         }
+    return 0;
+}
+int main() {
+    try {
+        int status = 0;
+        while (status != -1) {
+            cout << "\rServer :";
+            status = handleCommand();
+        }
     }
+    catch (const exception &e) {
+        cerr << e.what() << endl;
+    }
+    catch (...) {
+        cerr << "Unknown exception!" << endl;
+    }
+    cout<<"Bye"<<endl;
     return 0;
 }
