@@ -30,7 +30,12 @@ struct ClientInfo {
     string ClientMac;
     string ClientIp;
     time_t lastActive;
+    size_t headerLen;
+    size_t contenLen;
     int requestCount = 0;
+    vector<char>* byteRead;
+    bool isHead = false;
+    bool keepAlive = false;
 };
 
 unordered_map<int, ClientInfo *> clientMap;
@@ -38,8 +43,9 @@ mutex clientMapMutex;
 
 
 struct HttpRequest {
-    vector<char> *req;
+    vector<char> *req = nullptr;
     bool keepAlive;
+    bool isContinue = false;
 };
 
 
@@ -75,42 +81,58 @@ string getMAC(const string &ip) {
     return "";
 }
 
+
 struct HttpRequest *checkRequest(int fd, const int &epfd) {
     char *buf = new char[MAX_HEADER_LENGTH];
-    vector<char> *req = new vector<char>();
+    vector<char> req;
     string *header = new string();
     size_t totalRead = 0;
     bool keepAlive = false;
-    while (true) {
-        ssize_t n = read(fd, buf, MAX_HEADER_LENGTH);
+    ssize_t n = read(fd, buf, MAX_HEADER_LENGTH);
+    clientMapMutex.lock();
+    if (clientMap.count(fd)) clientMap[fd]->lastActive = time(nullptr);
+    clientMapMutex.unlock();
+    if (n > 0) {
+        if (clientMap[fd]->byteRead == nullptr) {
+            clientMapMutex.lock();
+            clientMap[fd]->byteRead = new vector<char>();
+            clientMapMutex.unlock();
+        }
+        req.insert(req.end(),clientMap[fd]->byteRead->begin(), clientMap[fd]->byteRead->end());
+        req.insert(req.end(), buf, buf + n);
         clientMapMutex.lock();
-        if (clientMap.count(fd)) clientMap[fd]->lastActive = time(nullptr);
+        clientMap[fd]->byteRead->insert(clientMap[fd]->byteRead->end(), buf, buf + n);
         clientMapMutex.unlock();
-        if (n > 0) {
-            req->insert(req->end(), buf, buf + n);
-            totalRead += n;
-            cout<<buf<<endl;
+        /*cout<<buf<<endl;*/
+        size_t totalRead = clientMap[fd]->byteRead->size();
+        if (!clientMap[fd]->isHead) {
             header->append(buf, n);
-
             if (totalRead > MAX_CONTENT_LENGTH) {
                 string response = Response<string>().build(400, "Vuot qua do dai", new string());
                 send(fd, response.c_str(), response.size(), 0);
-                break;
+                delete header;
+                delete[] buf;
+                return nullptr;
             }
-
             size_t headerEnd = header->find("\r\n\r\n");
             if (headerEnd != string::npos) {
+                clientMapMutex.lock();
+                clientMap[fd]->isHead = true;
+                clientMap[fd]->headerLen= headerEnd;
+                clientMapMutex.unlock();
                 if (header->find("Transfer-Encoding: chunked") != string::npos) {
                     string response = Response<string>().build(400, "Chunked not supported", new string());
                     send(fd, response.c_str(), response.size(), 0);
-                    break;
+                    delete header;
+                    delete[] buf;
+                    return nullptr ;
                 }
-
                 if (header->find("Connection: keep-alive") != string::npos ||
-                     header->find("Connection: close") == string::npos) {
-                    keepAlive = true;
-                }
-
+                        header->find("Connection: close") == string::npos) {
+                    clientMapMutex.lock();
+                    clientMap[fd]->keepAlive = true;
+                    clientMapMutex.unlock();
+                        }
                 size_t clPos = header->find("Content-Length:");
                 size_t contentLength = 0;
                 if (clPos != string::npos) {
@@ -118,38 +140,57 @@ struct HttpRequest *checkRequest(int fd, const int &epfd) {
                     while (clPos < header->size() && (*header)[clPos] == ' ') clPos++;
                     size_t endLine = header->find("\r\n", clPos);
                     if (endLine == string::npos) endLine = header->size();
-                    try { contentLength = std::stoul(header->substr(clPos, endLine - clPos)); } catch (...) {
+                    try {
+                        contentLength = std::stoul(header->substr(clPos, endLine - clPos));
+                    } catch (...) {
                         contentLength = 0;
                     }
-
-                    if (req->size() >= headerEnd + 4 + contentLength) break;
-                } else {
-                    epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-                    delete[] buf;
-                    delete header;
-                    return nullptr;
+                    clientMapMutex.lock();
+                    clientMap[fd]->contenLen = contentLength;
+                    clientMapMutex.unlock();
+                    if (req.size() < headerEnd + 4 + contentLength) {
+                        delete header;
+                        delete[] buf;
+                        HttpRequest* returnData = new HttpRequest();
+                        returnData->isContinue = true;
+                        return returnData;
+                    }
                 }
             }
-        } else if (n == 0) {
-            break;
-        } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            this_thread::sleep_for(chrono::milliseconds(10));
-        } else {
-            epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
-            delete[] buf;
-            delete header;
-            return nullptr;
         }
     }
-    epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+            else if (n == 0) {
+                epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+                delete header;
+                delete[] buf;
+                return nullptr;
+            } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                //this_thread::sleep_for(chrono::milliseconds(10));
+                delete header;
+                delete[] buf;
+                HttpRequest* returnData = new HttpRequest();
+                returnData->isContinue = true;
+                return returnData;
+
+            } else {
+                delete[] buf;
+                delete header;
+                return nullptr;
+            }
+    if (req.size() <  clientMap[fd]->headerLen + 4 + clientMap[fd]->contenLen) {
+        delete header;
+        delete[] buf;
+        HttpRequest* returnData = new HttpRequest();
+        returnData->isContinue = true;
+        return returnData;
+    }
+    HttpRequest* returnData = new HttpRequest();
+    returnData->req = new vector<char>(req.begin(), req.end());
+    returnData->keepAlive = clientMap[fd]->keepAlive;
     delete[] buf;
     delete header;
-    auto *result = new HttpRequest();
-    result->req = req;
-    result->keepAlive = keepAlive;
-    return result;
-}
-
+    return returnData;
+        }
 
 void stopServer() {
     if (serverFd != -1) {
@@ -182,17 +223,18 @@ void stopServer() {
 void handle(HttpRequest *request, ClientInfo *clientInfo, const int &fd, const int &epfd) {
     string response = controller->handleRequestAsync(request->req, clientInfo->ClientMac, clientInfo->ClientIp);
     send(fd, response.c_str(), response.size(), 0);
-
+ //kiem co keep-alive khong
     if (!request->keepAlive) {
         {
             lock_guard<mutex> lg(clientMapMutex);
             auto it = clientMap.find(fd);
             if (it != clientMap.end()) {
+                delete it->second->byteRead;
                 delete it->second;
                 clientMap.erase(it);
             }
         }
-        close(fd);
+        close(fd);//dong ketn
     } else {
         clientInfo->requestCount++;
         struct epoll_event ev{};
@@ -207,7 +249,7 @@ void handle(HttpRequest *request, ClientInfo *clientInfo, const int &fd, const i
 
 void startServer(const vector<string> &className) {
     struct sockaddr_in address;
-    int turn = 1;
+    /*int turn = 1; // bien bat tat server*/
     int addrlen = sizeof(address);
 
     if ((serverFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -291,12 +333,13 @@ void startServer(const vector<string> &className) {
         }
         static time_t lastCheck = 0;
         time_t now = time(nullptr);
-        if (now - lastCheck >= 5) {
+        if (now - lastCheck >= 5) {//client ma giu qua 5s server se ngat ket noi
             lastCheck = now;
             lock_guard<mutex> lock(clientMapMutex);
             for (auto it = clientMap.begin(); it != clientMap.end();) {
                 if (now - it->second->lastActive > 5) {
                     close(it->first);
+                    delete it -> second->byteRead;
                     delete it->second;
                     it = clientMap.erase(it);
                 } else {
@@ -327,7 +370,7 @@ void startServer(const vector<string> &className) {
                 info->ClientMac = mac;
                 info->ClientIp = clientIP;
                 info->lastActive = time(nullptr);
-                lock_guard<std::mutex> lock(clientMapMutex);
+                lock_guard<mutex> lock(clientMapMutex);
                 clientMap[newFd] = info;
                 cout << clientIP << " vua thuc hien ket noi.\nMAC : " << mac << endl;
                 fcntl(newFd,F_SETFL, O_NONBLOCK);
@@ -343,6 +386,10 @@ void startServer(const vector<string> &className) {
                     send(clientFd, response.c_str(), response.size(), 0);
                     epoll_ctl(epfd, EPOLL_CTL_DEL, clientFd, NULL);
                     close(clientFd);
+                    delete x;
+                    break;
+                }else if (x->isContinue) {
+                    delete x->req;
                     delete x;
                     break;
                 } else {
@@ -376,6 +423,7 @@ void startServer(const vector<string> &className) {
         lock_guard<mutex> lock(clientMapMutex);
         for (auto &p: clientMap) {
             close(p.first);
+            delete p.second->byteRead;
             delete p.second;
         }
         clientMap.clear();
